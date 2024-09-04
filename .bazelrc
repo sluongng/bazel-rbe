@@ -1,3 +1,35 @@
+# ===============================
+# BuildBuddy RBE flags & configs
+# ===============================
+
+startup --digest_function=BLAKE3
+
+common:bb-remote --bes_results_url=https://app.buildbuddy.io/invocation/
+common:bb-remote --bes_backend=grpcs://remote.buildbuddy.io
+common:bb-remote --remote_executor=grpcs://remote.buildbuddy.io
+common:bb-remote --remote_timeout=600
+common:bb-remote --jobs=2000
+common:bb-remote --action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:bb-remote --extra_toolchains=@toolchains_buildbuddy//toolchains/cc:ubuntu_gcc_x86_64
+common:bb-remote --extra_execution_platforms=//:bb_platform,//:bb_highcpu_platform
+common:bb-remote --platforms=//:bb_platform
+
+# In user.bazelrc, add this line
+# common:bb-remote --remote_header=x-buildbuddy-api-key=<YOUR_API_KEY_HERE>
+
+# Best practice
+common:bb-remote --remote_cache_compression
+common:bb-remote --remote_download_minimal
+common:bb-remote --noslim_profile
+common:bb-remote --experimental_profile_include_target_label
+common:bb-remote --experimental_profile_include_primary_output
+common:bb-remote --experimental_remote_cache_lease_extension
+
+# Cosmetic only
+common:bb-remote --test_output=errors
+common:bb-remote --ui_actions_shown=32
+common:bb-remote --test_summary=terse
+
 common --enable_platform_specific_config
 
 # Shared configuration flags to build and test Bazel on RBE.

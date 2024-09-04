@@ -90,6 +90,11 @@ genrule(
         "$$ROOT/$(location //src:bazel) --batch --output_user_root=$$TMPDIR/output_user_root query --check_direct_dependencies=error --lockfile_mode=update :all",
         "mv MODULE.bazel.lock $$ROOT/$@",
     ]),
+    exec_properties = {
+        # Enable internet access by default as some Bazel tests need to reach BCR
+        # or download dependencies (rules_cc, rules_java, JDK, etc...)
+        "dockerNetwork": "bridge",
+    },
     tags = ["requires-network"],
     tools = ["//src:bazel"],
 )
@@ -304,3 +309,33 @@ REMOTE_PLATFORMS = ("rbe_ubuntu2004",)
     )
     for platform_name in REMOTE_PLATFORMS
 ]
+
+# ======================
+# BuildBuddy platforms
+# ======================
+
+platform(
+    name = "bb_platform",
+    exec_properties = {
+        # Many tests assume running as a non-root user to validate different FS permissions.
+        # Disable root user by default seems like a sane thing todo here.
+        "dockerUser": "buildbuddy",
+        # Enable internet access by default as some Bazel tests need to reach BCR
+        # or download dependencies (rules_cc, rules_java, JDK, etc...)
+        "test.dockerNetwork": "bridge",
+    },
+    parents = ["@toolchains_buildbuddy//platforms:linux_x86_64"],
+)
+
+# The highcpu RBE platform where heavy actions run on. In order to
+# use this platform add the highcpu_machine constraint to your target.
+platform(
+    name = "bb_highcpu_platform",
+    constraint_values = [
+        "//:highcpu_machine",
+    ],
+    exec_properties = {
+        "test.EstimatedComputeUnits": "4",
+    },
+    parents = ["//:bb_platform"],
+)

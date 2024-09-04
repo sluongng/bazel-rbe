@@ -102,6 +102,16 @@ class TestBase(absltest.TestCase):
         if TestBase.IsDarwin():
           # For reducing SSD usage on our physical Mac machines.
           f.write('common --experimental_repository_cache_hardlinks\n')
+
+      # The nested Bazel instances spawned by integration tests don't read the
+      # workspace .bazelrc, so they would try to auto-detect a local JDK. That
+      # fails when the test itself runs on a remote worker without a system
+      # JDK, leading to the "nosystemjdk" error. Force them to use the
+      # downloadable remote JDK/toolchains instead.
+      f.write('common --java_language_version=21\n')
+      f.write('common --tool_java_language_version=21\n')
+      f.write('common --java_runtime_version=remotejdk_21\n')
+      f.write('common --tool_java_runtime_version=remotejdk_21\n')
       if TestBase.IsDarwin() and _HasIpv6DefaultRoute():
         # Prefer IPv6 network on macOS only when an IPv6 default route exists.
         f.write('startup --host_jvm_args=-Djava.net.preferIPv6Addresses=true\n')
