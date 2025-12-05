@@ -1,0 +1,70 @@
+name: RBE Master Sync
+
+on:
+  schedule:
+    # Daily at 07:15 UTC; adjust as needed
+    - cron: '15 7 * * *'
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: 'Branch to track and push to rbe (default: master)'
+        required: false
+      upstream_repo:
+        description: 'Upstream repo owner/name (default: bazelbuild/bazel)'
+        required: false
+      target_repo:
+        description: 'Target repo owner/name (default: sluongng/bazel-rbe)'
+        required: false
+
+env:
+  BASE_BRANCH: ${{ github.event.inputs.base_branch || 'master' }}
+  UPSTREAM_REPO: ${{ github.event.inputs.upstream_repo || 'bazelbuild/bazel' }}
+  TARGET_REPO: ${{ github.event.inputs.target_repo || 'sluongng/bazel-rbe' }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure push token is available
+        env:
+          TOKEN: ${{ secrets.RBE_PUSH_TOKEN }}
+        run: |
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::Set the RBE_PUSH_TOKEN secret with a PAT that can push to ${TARGET_REPO}" >&2
+            exit 1
+          fi
+
+      - name: Configure git remotes
+        env:
+          PUSH_TOKEN: ${{ secrets.RBE_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "rbe-sync-bot"
+          git config user.email "actions@github.com"
+          git remote set-url origin https://github.com/${UPSTREAM_REPO}.git
+          git remote add rbe https://${PUSH_TOKEN}@github.com/${TARGET_REPO}.git
+          git remote -v
+
+      - name: Fetch branches
+        run: |
+          set -euo pipefail
+          git fetch origin ${BASE_BRANCH} --tags
+          git fetch rbe ${BASE_BRANCH} || true
+
+      - name: Rebase local stack onto upstream
+        run: |
+          set -euo pipefail
+          git checkout ${BASE_BRANCH}
+          git rebase --rebase-merges origin/${BASE_BRANCH}
+
+      - name: Force push updated stack to rbe master
+        run: |
+          set -euo pipefail
+          git push --force-with-lease rbe HEAD:${BASE_BRANCH}
