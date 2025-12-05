@@ -1,0 +1,24 @@
+actions:
+  - name: Test
+    container_image: ubuntu-24.04
+    triggers:
+      push:
+        branches:
+          - "master"
+    steps:
+      # TODO(sluongng): enable more shell tests
+      #   Most of them should be RBE compatible,
+      #   but because some of them do requires additional attention.
+      #   I am just applying a blanket exclusion here due to lack of time.
+      - run: |
+          bazel test \
+            --config=bb-remote \
+            -- \
+            //... \
+            -//examples/... \
+            -//scripts/... \
+            -//src/main/native/windows/... \
+            -//src/test/shell/... \
+            -//src/tools/launcher/... \
+            -//third_party/... \
+            -//tools/...
