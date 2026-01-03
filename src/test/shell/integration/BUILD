@@ -603,6 +603,10 @@ sh_test(
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
     shard_count = 3,
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+    },
     tags = [
         # MacOS does not have cgroups so it can't support hardened sandbox
         "no_macos",
