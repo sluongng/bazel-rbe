@@ -186,10 +186,14 @@ public final class TransitiveDependencyState {
       result.addAll(packages);
 
       for (NestedSet<Package.Metadata> packageSet : configuredTargetPackages.values()) {
-        result.addTransitive(packageSet);
+        if (packageSet != null) {
+          result.addTransitive(packageSet);
+        }
       }
       for (NestedSet<Package.Metadata> packageSet : aspectPackages.values()) {
-        result.addTransitive(packageSet);
+        if (packageSet != null) {
+          result.addTransitive(packageSet);
+        }
       }
 
       return result.build();

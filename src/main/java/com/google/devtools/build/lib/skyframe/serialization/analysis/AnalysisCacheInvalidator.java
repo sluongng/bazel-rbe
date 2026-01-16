@@ -28,11 +28,13 @@ import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.profiler.Profiler;
 import com.google.devtools.build.lib.profiler.SilentCloseable;
+import com.google.devtools.build.lib.skyframe.serialization.AnalysisCacheKeyProtoUtils;
 import com.google.devtools.build.lib.skyframe.serialization.FingerprintValueService;
 import com.google.devtools.build.lib.skyframe.serialization.FrontierNodeVersion;
 import com.google.devtools.build.lib.skyframe.serialization.ObjectCodecs;
 import com.google.devtools.build.lib.skyframe.serialization.PackedFingerprint;
 import com.google.devtools.build.lib.skyframe.serialization.SerializationResult;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.AnalysisCacheLookupResponse;
 import com.google.devtools.build.skyframe.SkyKey;
 import com.google.protobuf.ByteString;
 import java.util.Objects;
@@ -164,17 +166,30 @@ public final class AnalysisCacheInvalidator {
             ForkJoinPool.commonPool());
 
     // 3. Submit the fingerprint to the analysis cache service
-    ListenableFuture<ByteString> responseFuture =
+    ListenableFuture<AnalysisCacheLookupResponse> responseFuture =
         Futures.transformAsync(
             fingerprint,
-            f -> analysisCacheClient.lookup(ByteString.copyFrom(f.toBytes())),
+            f ->
+                analysisCacheClient.lookup(
+                    AnalysisCacheKeyProtoUtils.buildLookupRequest(f, key, currentVersion)),
             ForkJoinPool.commonPool());
 
     // 4. Transform result to return keys that should be invalidated (i.e.
     // empty response, cache miss)
     return Futures.transform(
         responseFuture,
-        response -> response.isEmpty() ? Optional.of(key) : Optional.empty(),
+        response -> {
+          return switch (response.getResult()) {
+            case LOOKUP_RESULT_HIT -> Optional.empty();
+            case LOOKUP_RESULT_MISS -> Optional.of(key);
+            case LOOKUP_RESULT_ERROR, LOOKUP_RESULT_UNSPECIFIED, UNRECOGNIZED -> {
+              logger.atWarning().log(
+                  "Skycache: remote analysis cache lookup failed for %s: %s",
+                  key, response.getErrorMessage());
+              yield Optional.of(key);
+            }
+          };
+        },
         directExecutor());
   }
 }

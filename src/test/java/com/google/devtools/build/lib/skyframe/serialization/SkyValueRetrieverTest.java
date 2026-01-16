@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.hash.HashCode;
+import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.devtools.build.lib.skyframe.serialization.DependOnFutureShim.ObservedFutureStatus;
@@ -43,6 +44,10 @@ import com.google.devtools.build.lib.skyframe.serialization.SkyValueRetriever.Wa
 import com.google.devtools.build.lib.skyframe.serialization.SkyValueRetriever.WaitingForLookupContinuation;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId.SnapshotClientId;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheClient;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.AnalysisCacheLookupRequest;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.AnalysisCacheLookupResponse;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.AnalysisValue;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.LookupResult;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
 import com.google.devtools.build.lib.skyframe.serialization.testutils.GetRecordingStore;
 import com.google.devtools.build.skyframe.IntVersion;
@@ -69,6 +74,8 @@ import org.junit.runner.RunWith;
 
 @RunWith(TestParameterInjector.class)
 public final class SkyValueRetrieverTest {
+  private static final BaseEncoding HEX = BaseEncoding.base16().lowerCase();
+
   /** Default implementation that errors if any keys are requested. */
   private static final EnvironmentForUtilities NO_LOOKUP_ENVIRONMENT =
       new EnvironmentForUtilities(
@@ -140,8 +147,8 @@ public final class SkyValueRetrieverTest {
   public void initialQueryState_withAnalysisCacheService_progressesToWaiting(
       @TestParameter InitialQueryCases testCase) throws Exception {
     var fingerprintValueService = FingerprintValueService.createForTesting();
-    var data = new HashMap<ByteString, ByteString>();
-    var captured = new ArrayList<SettableFuture<ByteString>>();
+    var data = new HashMap<String, ByteString>();
+    var captured = new ArrayList<SettableFuture<AnalysisCacheLookupResponse>>();
     RemoteAnalysisCacheClient analysisCacheClient =
         switch (testCase) {
           case IMMEDIATE_EMPTY_VALUE, IMMEDIATE_MISSING_VALUE ->
@@ -218,7 +225,7 @@ public final class SkyValueRetrieverTest {
   @Test
   public void waitingForCacheServiceResponse_returnsValue() throws Exception {
     var fingerprintValueService = FingerprintValueService.createForTesting();
-    var analysisCacheServiceData = new HashMap<ByteString, ByteString>();
+    var analysisCacheServiceData = new HashMap<String, ByteString>();
     var state = new RetrievalContext();
     RemoteAnalysisCacheClient analysisCacheClient =
         createFakeAnalysisCacheClient(analysisCacheServiceData);
@@ -255,13 +262,15 @@ public final class SkyValueRetrieverTest {
       RetrievalResult previousResult)
       throws SerializationException, ExecutionException, InterruptedException {
     if (state.getState()
-        instanceof WaitingForCacheServiceResponse(ListenableFuture<ByteString> futureBytes)) {
+        instanceof
+        WaitingForCacheServiceResponse(
+            ListenableFuture<AnalysisCacheLookupResponse> futureResponse)) {
       // There's a race condition here due to the RequestBatcher's response handling executor.
       // Most of the time, the test thread will outrace the executor and require a restart, but
       // RequestBatcher could occasionally outrace this thread.
 
       // Waits for the future to complete and simulates a restart.
-      var unused = futureBytes.get();
+      var unused = futureResponse.get();
       return SkyValueRetriever.tryRetrieve(
           NO_LOOKUP_ENVIRONMENT,
           SkyValueRetrieverTest::dependOnFutureImpl,
@@ -995,7 +1004,7 @@ public final class SkyValueRetrieverTest {
       SkyKey key,
       SkyValue value,
       FingerprintValueService fingerprintValueService,
-      @Nullable Map<ByteString, ByteString> analysisCacheServiceData)
+      @Nullable Map<String, ByteString> analysisCacheServiceData)
       throws SerializationException, InterruptedException, ExecutionException {
     uploadKeyValuePair(
         key, CONSTANT_FOR_TESTING, value, fingerprintValueService, analysisCacheServiceData);
@@ -1016,7 +1025,7 @@ public final class SkyValueRetrieverTest {
       FrontierNodeVersion version,
       SkyValue value,
       FingerprintValueService fingerprintValueService,
-      @Nullable Map<ByteString, ByteString> analysisCacheServiceData)
+      @Nullable Map<String, ByteString> analysisCacheServiceData)
       throws SerializationException, InterruptedException, ExecutionException {
     SerializationResult<ByteString> keyBytes =
         codecs.serializeMemoizedAndBlocking(
@@ -1038,8 +1047,7 @@ public final class SkyValueRetrieverTest {
         fingerprintValueService.fingerprint(version.concat(keyBytes.getObject().toByteArray()));
 
     if (analysisCacheServiceData != null) {
-      analysisCacheServiceData.put(
-          ByteString.copyFrom(keyFingerprint.toBytes()), valueBytes.getObject());
+      analysisCacheServiceData.put(HEX.encode(keyFingerprint.toBytes()), valueBytes.getObject());
     } else {
       var unused =
           fingerprintValueService
@@ -1050,13 +1058,28 @@ public final class SkyValueRetrieverTest {
   }
 
   private static RemoteAnalysisCacheClient createFakeAnalysisCacheClient(
-      Map<ByteString, ByteString> data) {
+      Map<String, ByteString> data) {
     RemoteAnalysisCacheClient result = mock(RemoteAnalysisCacheClient.class);
     when(result.lookup(any()))
         .thenAnswer(
             invocation -> {
-              ByteString key = invocation.getArgument(0);
-              return immediateFuture(data.getOrDefault(key, ByteString.empty()));
+              AnalysisCacheLookupRequest request = invocation.getArgument(0);
+              String keyHex = request.getKey().getFingerprintHex();
+              ByteString value = data.get(keyHex);
+              AnalysisCacheLookupResponse.Builder response =
+                  AnalysisCacheLookupResponse.newBuilder().setKey(request.getKey());
+              if (value == null) {
+                response.setResult(LookupResult.LOOKUP_RESULT_MISS);
+              } else {
+                response
+                    .setResult(LookupResult.LOOKUP_RESULT_HIT)
+                    .setValue(
+                        AnalysisValue.newBuilder()
+                            .setSerializedValue(value)
+                            .setSizeBytes(value.size())
+                            .build());
+              }
+              return immediateFuture(response.build());
             });
 
     return result;
@@ -1068,13 +1091,13 @@ public final class SkyValueRetrieverTest {
    * <p>The client sets the {@link SettableFuture} to complete the request.
    */
   private static RemoteAnalysisCacheClient createCapturingAnalysisCacheClient(
-      Consumer<SettableFuture<ByteString>> capturer) {
+      Consumer<SettableFuture<AnalysisCacheLookupResponse>> capturer) {
     RemoteAnalysisCacheClient result = mock(RemoteAnalysisCacheClient.class);
 
     when(result.lookup(any()))
         .thenAnswer(
             invocation -> {
-              var settable = SettableFuture.<ByteString>create();
+              var settable = SettableFuture.<AnalysisCacheLookupResponse>create();
               capturer.accept(settable);
               return settable;
             });
@@ -1120,7 +1143,7 @@ public final class SkyValueRetrieverTest {
   record TrivialKey(String text) implements SkyKey {
     @Override
     public SkyFunctionName functionName() {
-      throw new UnsupportedOperationException();
+      return SkyFunctionName.FOR_TESTING;
     }
   }
 

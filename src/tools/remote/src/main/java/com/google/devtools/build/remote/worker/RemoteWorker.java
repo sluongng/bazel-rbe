@@ -26,6 +26,7 @@ import build.bazel.remote.execution.v2.ExecutionGrpc.ExecutionImplBase;
 import com.google.bytestream.ByteStreamGrpc.ByteStreamImplBase;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.flogger.GoogleLogger;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -86,6 +87,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * Implements a remote worker that accepts work items as protobufs. The server implementation is
@@ -105,6 +107,7 @@ public final class RemoteWorker {
   private final ContentAddressableStorageImplBase casServer;
   private final ExecutionImplBase execServer;
   private final CapabilitiesImplBase capabilitiesServer;
+  private final AnalysisCacheServiceImpl analysisCacheService;
 
   static FileSystem getFileSystem() {
     final DigestHashFunction hashFunction;
@@ -206,24 +209,47 @@ public final class RemoteWorker {
       execServer = null;
     }
     this.capabilitiesServer = new CapabilitiesServer(digestUtil, execServer != null, workerOptions);
+    ImmutableSet.Builder<String> availableCommits = ImmutableSet.builder();
+    if (workerOptions.analysisCacheAvailableCommits != null) {
+      for (String commit : workerOptions.analysisCacheAvailableCommits) {
+        if (commit != null && !commit.isEmpty()) {
+          availableCommits.add(commit);
+        }
+      }
+    }
+    this.analysisCacheService =
+        new AnalysisCacheServiceImpl(
+            resolveLogPath(fs, workerOptions),
+            workerOptions.analysisCacheMatchStatus,
+            availableCommits.build(),
+            resolveGitRepoPath(fs, workerOptions));
   }
 
   public Server startServer() throws IOException {
     List<ServerInterceptor> interceptors = new ArrayList<>();
+    List<ServerInterceptor> analysisCacheInterceptors = new ArrayList<>();
     if (workerOptions.unavailable) {
-      interceptors.add(new UnavailableInterceptor());
+      ServerInterceptor unavailable = new UnavailableInterceptor();
+      interceptors.add(unavailable);
+      analysisCacheInterceptors.add(unavailable);
     }
-    interceptors.add(new TracingMetadataUtils.ServerHeadersInterceptor());
     if (workerOptions.expectedAuthorizationToken != null) {
-      interceptors.add(new AuthorizationTokenInterceptor(workerOptions.expectedAuthorizationToken));
+      ServerInterceptor auth =
+          new AuthorizationTokenInterceptor(workerOptions.expectedAuthorizationToken);
+      interceptors.add(auth);
+      analysisCacheInterceptors.add(auth);
     }
+    // AnalysisCacheService does not send REAPI RequestMetadata, so avoid that interceptor there.
+    interceptors.add(new TracingMetadataUtils.ServerHeadersInterceptor());
 
     NettyServerBuilder b =
         NettyServerBuilder.forPort(workerOptions.listenPort)
             .addService(ServerInterceptors.intercept(actionCacheServer, interceptors))
             .addService(ServerInterceptors.intercept(bsServer, interceptors))
             .addService(ServerInterceptors.intercept(casServer, interceptors))
-            .addService(ServerInterceptors.intercept(capabilitiesServer, interceptors));
+            .addService(ServerInterceptors.intercept(capabilitiesServer, interceptors))
+            .addService(
+                ServerInterceptors.intercept(analysisCacheService, analysisCacheInterceptors));
 
     if (workerOptions.tlsCertificate != null) {
       b.sslContext(getSslContextBuilder(workerOptions).build());
@@ -367,6 +393,22 @@ public final class RemoteWorker {
     if (workerGroup != null) {
       workerGroup.shutdownGracefully();
     }
+  }
+
+  @Nullable
+  private static Path resolveLogPath(FileSystem fs, RemoteWorkerOptions options) {
+    if (options.analysisCacheLogPath == null) {
+      return null;
+    }
+    return fs.getPath(options.analysisCacheLogPath);
+  }
+
+  @Nullable
+  private static Path resolveGitRepoPath(FileSystem fs, RemoteWorkerOptions options) {
+    if (options.analysisCacheGitRepoPath == null) {
+      return null;
+    }
+    return fs.getPath(options.analysisCacheGitRepoPath);
   }
 
   private static Path prepareSandboxRunner(FileSystem fs, RemoteWorkerOptions remoteWorkerOptions)

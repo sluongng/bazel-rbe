@@ -22,6 +22,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.devtools.build.lib.skyframe.serialization.FingerprintValueStore.MissingFingerprintValueException;
 import com.google.devtools.build.lib.skyframe.serialization.SharedValueDeserializationContext.StateEvictedException;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheClient;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.AnalysisCacheLookupResponse;
 import com.google.devtools.build.lib.skyframe.serialization.proto.DataType;
 import com.google.devtools.build.skyframe.SkyFunction.Environment.SkyKeyComputeState;
 import com.google.devtools.build.skyframe.SkyFunction.LookupEnvironment;
@@ -245,8 +246,10 @@ public final class SkyValueRetriever {
                 serializationState = new WaitingForFutureValueBytes(futureValueBytes);
                 responseFuture = futureValueBytes;
               } else {
-                ListenableFuture<ByteString> futureResponseBytes =
-                    analysisCacheClient.lookup(ByteString.copyFrom(cacheKey.toBytes()));
+                ListenableFuture<AnalysisCacheLookupResponse> futureResponseBytes =
+                    analysisCacheClient.lookup(
+                        AnalysisCacheKeyProtoUtils.buildLookupRequest(
+                            cacheKey, key, frontierNodeVersion));
 
                 serializationState = new WaitingForCacheServiceResponse(futureResponseBytes);
                 responseFuture = futureResponseBytes;
@@ -312,20 +315,33 @@ public final class SkyValueRetriever {
               serializationState = new ProcessValueCodedInput(codedIn);
               break;
             }
-          case WaitingForCacheServiceResponse(ListenableFuture<ByteString> futureBytes):
+          case WaitingForCacheServiceResponse(ListenableFuture<AnalysisCacheLookupResponse> future):
             {
-              ByteString responseBytes;
+              AnalysisCacheLookupResponse response;
               try {
-                responseBytes = getDone(futureBytes);
+                response = getDone(future);
               } catch (ExecutionException e) {
                 throw new SerializationException("getting cache response for " + key, e);
               }
-              if (responseBytes.isEmpty()) {
-                serializationState = NoCachedData.NO_CACHED_DATA;
-                break;
+              switch (response.getResult()) {
+                case LOOKUP_RESULT_HIT -> {
+                  if (response.getValue().getSerializedValue().isEmpty()) {
+                    serializationState = NoCachedData.NO_CACHED_DATA;
+                    break;
+                  }
+                  serializationState =
+                      new ProcessValueByteString(response.getValue().getSerializedValue());
+                }
+                case LOOKUP_RESULT_MISS -> serializationState = NoCachedData.NO_CACHED_DATA;
+                case LOOKUP_RESULT_ERROR, LOOKUP_RESULT_UNSPECIFIED, UNRECOGNIZED -> {
+                  String message =
+                      response.getErrorMessage().isEmpty()
+                          ? "unknown remote analysis cache lookup failure"
+                          : response.getErrorMessage();
+                  throw new SerializationException(
+                      "cache service error for " + key + ": " + message);
+                }
               }
-
-              serializationState = new ProcessValueByteString(responseBytes);
               break;
             }
           case ProcessValueBytes valueBytes:
@@ -415,7 +431,8 @@ public final class SkyValueRetriever {
       implements SerializationState {}
 
   @VisibleForTesting
-  record WaitingForCacheServiceResponse(ListenableFuture<ByteString> cacheResponseBytes)
+  record WaitingForCacheServiceResponse(
+      ListenableFuture<AnalysisCacheLookupResponse> cacheResponseBytes)
       implements SerializationState {}
 
   private static sealed interface ProcessValueBytes extends SerializationState

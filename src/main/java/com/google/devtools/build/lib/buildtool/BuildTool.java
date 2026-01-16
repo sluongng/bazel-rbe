@@ -57,6 +57,7 @@ import com.google.devtools.build.lib.analysis.config.BuildOptions;
 import com.google.devtools.build.lib.analysis.config.FragmentOptions;
 import com.google.devtools.build.lib.analysis.config.InvalidConfigurationException;
 import com.google.devtools.build.lib.analysis.test.TestConfiguration;
+import com.google.devtools.build.lib.authandtls.AuthAndTLSOptions;
 import com.google.devtools.build.lib.buildeventstream.BuildEvent.LocalFile.LocalFileType;
 import com.google.devtools.build.lib.buildeventstream.BuildEventArtifactUploader.UploadContext;
 import com.google.devtools.build.lib.buildeventstream.BuildEventIdUtil;
@@ -132,6 +133,8 @@ import com.google.devtools.build.lib.skyframe.serialization.analysis.AnalysisCac
 import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId.LongVersionClientId;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.FrontierSerializer;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.GrpcRemoteAnalysisCacheClient;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.GitRepositoryState;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheClient;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCachingDependenciesProvider;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCachingEventListener;
@@ -1280,10 +1283,13 @@ public class BuildTool {
     private final boolean useFakeStampData;
 
     /** Cache lookup parameter requiring integration with external version control. */
-    private final IntVersion evaluatingVersion;
+    private IntVersion evaluatingVersion;
 
     /** Cache lookup parameter requiring integration with external version control. */
     private final Optional<ClientId> snapshot;
+
+    /** Git workspace state for open-source remote analysis caching. */
+    @Nullable private final GitRepositoryState gitRepositoryState;
 
     @Nullable private final RemoteAnalysisJsonLogWriter jsonLogWriter;
 
@@ -1511,21 +1517,45 @@ public class BuildTool {
       this.useFakeStampData = env.getUseFakeStampData();
 
       var workspaceInfoFromDiff = env.getWorkspaceInfoFromDiff();
-      if (workspaceInfoFromDiff == null) {
+      GitRepositoryState gitRepositoryState = null;
+      if (workspaceInfoFromDiff == null
+          || workspaceInfoFromDiff.getEvaluatingVersion().getVal() == Long.MIN_VALUE) {
+        gitRepositoryState =
+            GitRepositoryState.maybeCreate(env.getWorkspace(), env.getClientEnv()).orElse(null);
+      }
+      this.gitRepositoryState = gitRepositoryState;
+      if (workspaceInfoFromDiff != null
+          && workspaceInfoFromDiff.getEvaluatingVersion().getVal() != Long.MIN_VALUE) {
+        this.evaluatingVersion = workspaceInfoFromDiff.getEvaluatingVersion();
+        this.snapshot = workspaceInfoFromDiff.getSnapshot();
+      } else if (gitRepositoryState != null) {
+        this.evaluatingVersion = IntVersion.of(gitRepositoryState.evaluatingVersion());
+        if (gitRepositoryState.workspaceId() != null && gitRepositoryState.commitCount() != null) {
+          this.snapshot =
+              Optional.of(
+                  new ClientId.SnapshotClientId(
+                      gitRepositoryState.workspaceId(), gitRepositoryState.commitCount()));
+        } else {
+          this.snapshot = Optional.empty();
+        }
+      } else {
         // If there is no workspace info, we cannot confidently version the nodes. Use the min
         // version as a sentinel.
         this.evaluatingVersion = IntVersion.of(Long.MIN_VALUE);
         this.snapshot = Optional.empty();
-      } else {
-        this.evaluatingVersion = workspaceInfoFromDiff.getEvaluatingVersion();
-        this.snapshot = workspaceInfoFromDiff.getSnapshot();
       }
       RemoteAnalysisCachingServicesSupplier servicesSupplier =
           env.getBlazeWorkspace().remoteAnalysisCachingServicesSupplier();
       ClientId clientId =
           this.snapshot.orElse(new LongVersionClientId(this.evaluatingVersion.getVal()));
       listener.setClientId(clientId);
-      servicesSupplier.configure(options, clientId, env.getCommandId().toString(), jsonLogWriter);
+      servicesSupplier.configure(
+          options,
+          clientId,
+          env.getCommandId().toString(),
+          jsonLogWriter,
+          env.getOptions().getOptions(AuthAndTLSOptions.class),
+          gitRepositoryState);
       this.fingerprintValueServiceFuture = servicesSupplier.getFingerprintValueService();
       this.analysisCacheClient = servicesSupplier.getAnalysisCacheClient();
       this.metadataWriter = servicesSupplier.getMetadataWriter();
@@ -1728,7 +1758,37 @@ public class BuildTool {
                 skycacheMetadataParams.getBazelVersion(),
                 eventHandler,
                 () -> bailedOut = true);
+        if (!bailedOut) {
+          maybeOverrideEvaluatingVersionFromBaseCommit();
+        }
       }
+    }
+
+    private void maybeOverrideEvaluatingVersionFromBaseCommit() {
+      RemoteAnalysisCacheClient client = getAnalysisCacheClient();
+      if (!(client instanceof GrpcRemoteAnalysisCacheClient grpcClient)) {
+        return;
+      }
+      String selectedCommit = grpcClient.getSelectedCommit();
+      if (Strings.isNullOrEmpty(selectedCommit)) {
+        return;
+      }
+      long baseVersion = GitRepositoryState.evaluatingVersionForCommit(selectedCommit);
+      long previousEvaluatingVersion = evaluatingVersion.getVal();
+      if (baseVersion == previousEvaluatingVersion) {
+        return;
+      }
+      evaluatingVersion = IntVersion.of(baseVersion);
+      frontierNodeVersionSingleton = null;
+      // Preserve local workspace changes in the client id so invalidation doesn't short-circuit.
+      ClientId updatedClientId =
+          previousEvaluatingVersion == Long.MIN_VALUE
+              ? snapshot.orElse(new LongVersionClientId(previousEvaluatingVersion))
+              : new LongVersionClientId(previousEvaluatingVersion);
+      listener.setClientId(updatedClientId);
+      analysisCacheInvalidator = null;
+      logger.atInfo().log(
+          "Skycache: overriding evaluating version to base commit %s", selectedCommit);
     }
 
     /**

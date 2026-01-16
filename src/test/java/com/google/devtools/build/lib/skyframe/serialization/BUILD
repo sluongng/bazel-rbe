@@ -41,6 +41,28 @@ java_test(
 )
 
 java_test(
+    name = "GrpcFingerprintValueStoreTest",
+    size = "small",
+    srcs = ["GrpcFingerprintValueStoreTest.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:grpc_fingerprint_value_store",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:write_statuses",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_grpc",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
+        "//third_party:guava",
+        "//third_party:junit4",
+        "//third_party:truth",
+        "//third_party/grpc-java:grpc-jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@maven//:io_grpc_grpc_api",
+        "@maven//:io_grpc_grpc_core",
+        "@maven//:io_grpc_grpc_inprocess",
+        "@maven//:io_grpc_grpc_stub",
+    ],
+)
+
+java_test(
     name = "SingletonCodecTest",
     size = "small",
     srcs = ["SingletonCodecTest.java"],
@@ -397,6 +419,7 @@ java_library(
             "TransitiveTraversalValueCodecTest.java",
             "WorkspaceNameValueCodecTest.java",
             "MemoizerTest.java",
+            "GrpcFingerprintValueStoreTest.java",
             "FileSymlinkExceptionCodecTest.java",
             "DirectoryListingValueCodecTest.java",
             "NoSuchTargetExceptionCodecTest.java",
@@ -435,6 +458,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:write_statuses",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:client_id",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:remote_analysis_cache_client",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/autocodec",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/autocodec:serialization-constant",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/testutils",

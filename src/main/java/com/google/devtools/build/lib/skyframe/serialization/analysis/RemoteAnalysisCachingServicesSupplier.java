@@ -14,6 +14,7 @@
 package com.google.devtools.build.lib.skyframe.serialization.analysis;
 
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.devtools.build.lib.authandtls.AuthAndTLSOptions;
 import com.google.devtools.build.lib.skyframe.serialization.FingerprintValueService;
 import com.google.devtools.build.lib.skyframe.serialization.SkycacheMetadataParams;
 import com.google.devtools.build.lib.util.AbruptExitException;
@@ -42,7 +43,9 @@ public interface RemoteAnalysisCachingServicesSupplier {
       RemoteAnalysisCachingOptions cachingOptions,
       @Nullable ClientId clientId,
       String buildId,
-      @Nullable RemoteAnalysisJsonLogWriter jsonLogWriter)
+      @Nullable RemoteAnalysisJsonLogWriter jsonLogWriter,
+      @Nullable AuthAndTLSOptions authAndTlsOptions,
+      @Nullable GitRepositoryState gitRepositoryState)
       throws AbruptExitException {
     // Does nothing by default.
   }

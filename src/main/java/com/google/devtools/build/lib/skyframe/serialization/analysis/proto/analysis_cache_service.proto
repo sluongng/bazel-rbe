@@ -1,0 +1,183 @@
+// Copyright 2025 The Bazel Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+edition = "2023";
+
+package devtools_blaze_proto;
+
+option java_multiple_files = true;
+option java_package = "com.google.devtools.build.lib.skyframe.serialization.analysis.proto";
+option java_outer_classname = "AnalysisCacheServiceProto";
+
+import "src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto/analysis_cache_service_metadata_status.proto";
+
+// Version information about the workspace used to build cache keys.
+message WorkspaceVersion {
+  oneof vcs {
+    GitWorkspaceVersion git = 1;
+  }
+}
+
+// Git-specific workspace version information.
+message GitWorkspaceVersion {
+  string commit = 1;
+  string tree = 2;
+  bool is_dirty = 3;
+  string origin_url = 4;
+  string branch = 5;
+}
+
+// Candidate commit for reuse of cached analysis data.
+message GitCommitCandidate {
+  string commit = 1;
+  string tree = 2;
+}
+
+// Identifies the client that produced or is consuming cache entries.
+message ClientId {
+  oneof id {
+    SnapshotClientId snapshot = 1;
+    int64 evaluating_version = 2;
+  }
+}
+
+message SnapshotClientId {
+  string workspace_id = 1;
+  int32 snapshot_version = 2;
+}
+
+// The frontier versioning data used to compute cache keys.
+message FrontierVersion {
+  string top_level_config_checksum = 1;
+  string blaze_install_md5 = 2;
+  int64 evaluating_version = 3;
+  bool use_fake_stamp_data = 4;
+  ClientId client_id = 5;
+  WorkspaceVersion workspace_version = 6;
+}
+
+// Fully-described analysis cache key for logging and debugging.
+message AnalysisCacheKey {
+  string fingerprint_hex = 1;
+  FrontierVersion frontier_version = 2;
+  string sky_key = 3;
+  string sky_function = 4;
+}
+
+message AnalysisCacheLookupRequest {
+  AnalysisCacheKey key = 1;
+}
+
+enum LookupResult {
+  LOOKUP_RESULT_UNSPECIFIED = 0;
+  LOOKUP_RESULT_HIT = 1;
+  LOOKUP_RESULT_MISS = 2;
+  LOOKUP_RESULT_ERROR = 3;
+}
+
+message AnalysisValue {
+  bytes serialized_value = 1;
+  int64 size_bytes = 2;
+  string value_digest_hex = 3;
+}
+
+message AnalysisCacheLookupResponse {
+  AnalysisCacheKey key = 1;
+  LookupResult result = 2;
+  AnalysisValue value = 3;
+  string error_message = 4;
+}
+
+message AnalysisCacheBatchLookupRequest {
+  repeated AnalysisCacheLookupRequest requests = 1;
+}
+
+message AnalysisCacheBatchLookupResponse {
+  repeated AnalysisCacheLookupResponse responses = 1;
+}
+
+message BuildMetadata {
+  int64 evaluating_version = 1;
+  string configuration_hash = 2;
+  bool use_fake_stamp_data = 3;
+  string bazel_version = 4;
+  WorkspaceVersion workspace_version = 5;
+}
+
+message QueryTopLevelTargetsRequest {
+  BuildMetadata build = 1;
+  repeated string targets = 2;
+  repeated string config_flags = 3;
+  repeated GitCommitCandidate git_commit_candidates = 4;
+}
+
+message QueryTopLevelTargetsResponse {
+  TopLevelTargetsMatchStatus match_status = 1;
+  string message = 2;
+  GitCommitCandidate selected_git_commit = 3;
+}
+
+message WriteTopLevelTargetsRequest {
+  string invocation_id = 1;
+  BuildMetadata build = 2;
+  repeated string targets = 3;
+  repeated string config_flags = 4;
+}
+
+message WriteTopLevelTargetsResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+message FingerprintKey {
+  string fingerprint_hex = 1;
+}
+
+message KeyValue {
+  FingerprintKey key = 1;
+  bytes value = 2;
+  int64 value_size = 3;
+  string value_digest_hex = 4;
+}
+
+message GetValuesRequest {
+  repeated FingerprintKey keys = 1;
+}
+
+message GetValuesResponse {
+  repeated KeyValue values = 1;
+  repeated FingerprintKey missing = 2;
+}
+
+message PutValuesRequest {
+  repeated KeyValue values = 1;
+}
+
+message PutValuesResponse {
+  repeated PutValueResult results = 1;
+}
+
+message PutValueResult {
+  FingerprintKey key = 1;
+  bool ok = 2;
+  string error_message = 3;
+}
+
+service AnalysisCacheService {
+  rpc BatchLookup(AnalysisCacheBatchLookupRequest) returns (AnalysisCacheBatchLookupResponse);
+  rpc QueryTopLevelTargets(QueryTopLevelTargetsRequest) returns (QueryTopLevelTargetsResponse);
+  rpc WriteTopLevelTargets(WriteTopLevelTargetsRequest) returns (WriteTopLevelTargetsResponse);
+  rpc GetValues(GetValuesRequest) returns (GetValuesResponse);
+  rpc PutValues(PutValuesRequest) returns (PutValuesResponse);
+}

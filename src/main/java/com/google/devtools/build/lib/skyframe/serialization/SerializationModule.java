@@ -21,6 +21,7 @@ import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.runtime.BlazeModule;
 import com.google.devtools.build.lib.runtime.BlazeRuntime;
 import com.google.devtools.build.lib.runtime.WorkspaceBuilder;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.GrpcRemoteAnalysisCachingServicesSupplier;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCachingServicesSupplier;
 import com.google.errorprone.annotations.ForOverride;
 import java.util.function.Supplier;
@@ -70,7 +71,7 @@ public class SerializationModule extends BlazeModule {
 
   @ForOverride
   protected RemoteAnalysisCachingServicesSupplier getAnalysisCachingServicesSupplier() {
-    return InMemoryRemoteAnalysisCachingServicesSupplier.INSTANCE;
+    return new GrpcRemoteAnalysisCachingServicesSupplier();
   }
 
   /** A supplier that uses an in-memory fingerprint value service. */
