@@ -267,9 +267,94 @@ java_library(
     srcs = ["RemoteAnalysisCacheClient.java"],
     deps = [
         "//src/main/java/com/google/devtools/build/lib/events",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_metadata_status_java_proto",
         "//third_party:guava",
         "@com_google_protobuf//:protobuf_java",
+    ],
+)
+
+java_library(
+    name = "git_repository_state",
+    srcs = ["GitRepositoryState.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
+        "//src/main/java/com/google/devtools/build/lib/shell",
+        "//src/main/java/com/google/devtools/build/lib/util:command",
+        "//src/main/java/com/google/devtools/build/lib/vfs",
+        "//third_party:error_prone_annotations",
+        "//third_party:flogger",
+        "//third_party:guava",
+        "//third_party:jsr305",
+    ],
+)
+
+java_library(
+    name = "skycache_metadata_params_impl",
+    srcs = ["SkycacheMetadataParamsImpl.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
+        "//third_party:guava",
+    ],
+)
+
+java_library(
+    name = "grpc_remote_analysis_cache_client",
+    srcs = ["GrpcRemoteAnalysisCacheClient.java"],
+    deps = [
+        ":git_repository_state",
+        ":options",
+        ":remote_analysis_cache_client",
+        "//src/main/java/com/google/devtools/build/lib/events",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_grpc",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_metadata_status_java_proto",
+        "//third_party:guava",
+        "//third_party:jsr305",
+        "@com_google_protobuf//:protobuf_java",
+        "//third_party/grpc-java:grpc-jar",
+    ],
+)
+
+java_library(
+    name = "grpc_remote_analysis_metadata_writer",
+    srcs = ["GrpcRemoteAnalysisMetadataWriter.java"],
+    deps = [
+        ":grpc_remote_analysis_cache_client",
+        ":git_repository_state",
+        ":remote_analysis_metadata_writer",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_grpc",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
+        "//third_party:guava",
+        "//third_party:jsr305",
+        "@com_google_protobuf//:protobuf_java",
+        "//third_party/grpc-java:grpc-jar",
+    ],
+)
+
+java_library(
+    name = "grpc_remote_analysis_caching_services_supplier",
+    srcs = ["GrpcRemoteAnalysisCachingServicesSupplier.java"],
+    deps = [
+        ":client_id",
+        ":git_repository_state",
+        ":grpc_remote_analysis_cache_client",
+        ":grpc_remote_analysis_metadata_writer",
+        ":options",
+        ":remote_analysis_cache_client",
+        ":remote_analysis_caching_services_supplier",
+        ":remote_analysis_json_log_writer",
+        ":remote_analysis_metadata_writer",
+        ":skycache_metadata_params_impl",
+        "//src/main/java/com/google/devtools/build/lib/authandtls",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:grpc_fingerprint_value_store",
+        "//src/main/java/com/google/devtools/build/lib/util:abrupt_exit_exception",
+        "//third_party:guava",
+        "//third_party:jsr305",
+        "@com_google_protobuf//:protobuf_java",
+        "//third_party/grpc-java:grpc-jar",
     ],
 )
 
@@ -278,10 +363,12 @@ java_library(
     srcs = ["RemoteAnalysisCachingServicesSupplier.java"],
     deps = [
         ":client_id",
+        ":git_repository_state",
         ":options",
         ":remote_analysis_cache_client",
         ":remote_analysis_json_log_writer",
         ":remote_analysis_metadata_writer",
+        "//src/main/java/com/google/devtools/build/lib/authandtls",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
         "//src/main/java/com/google/devtools/build/lib/util:abrupt_exit_exception",
         "//third_party:guava",
@@ -295,6 +382,7 @@ java_library(
     deps = [
         "//src/main/java/com/google/devtools/build/lib/util:TestType",
         "//src/main/java/com/google/devtools/build/lib/versioning:long_version_getter",
+        "//src/main/java/com/google/devtools/build/lib/vfs",
         "//third_party:guava",
     ],
 )
@@ -310,6 +398,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/profiler",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:frontier_node_version",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
         "//src/main/java/com/google/devtools/build/skyframe:skyframe-objects",
         "//third_party:flogger",
         "//third_party:guava",

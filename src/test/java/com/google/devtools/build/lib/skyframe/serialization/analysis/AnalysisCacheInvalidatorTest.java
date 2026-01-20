@@ -22,6 +22,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
+import com.google.common.io.BaseEncoding;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.skyframe.serialization.FingerprintValueService;
 import com.google.devtools.build.lib.skyframe.serialization.FrontierNodeVersion;
@@ -30,6 +31,10 @@ import com.google.devtools.build.lib.skyframe.serialization.PackedFingerprint;
 import com.google.devtools.build.lib.skyframe.serialization.VisibleForSerialization;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId.LongVersionClientId;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId.SnapshotClientId;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.AnalysisCacheLookupRequest;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.AnalysisCacheLookupResponse;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.AnalysisValue;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.LookupResult;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
 import com.google.devtools.build.skyframe.IntVersion;
 import com.google.devtools.build.skyframe.SkyFunctionName;
@@ -38,6 +43,7 @@ import com.google.protobuf.ByteString;
 import com.google.testing.junit.testparameterinjector.TestParameter;
 import com.google.testing.junit.testparameterinjector.TestParameterInjector;
 import java.util.Optional;
+import javax.annotation.Nullable;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -48,6 +54,7 @@ import org.mockito.junit.MockitoRule;
 /** Unit tests for {@link AnalysisCacheInvalidator}. */
 @RunWith(TestParameterInjector.class)
 public final class AnalysisCacheInvalidatorTest {
+  private static final BaseEncoding HEX = BaseEncoding.base16().lowerCase();
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   @Mock private RemoteAnalysisCacheClient mockAnalysisCacheClient;
@@ -83,10 +90,21 @@ public final class AnalysisCacheInvalidatorTest {
     PackedFingerprint fingerprint =
         FingerprintValueService.computeFingerprint(
             fingerprintService, objectCodecs, key, frontierNodeVersion);
+    String expectedHex = HEX.encode(fingerprint.toBytes());
 
     // Simulate a cache hit by returning a non-empty response.
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(fingerprint.toBytes())))
-        .thenReturn(immediateFuture(ByteString.copyFromUtf8("some_value")));
+    when(mockAnalysisCacheClient.lookup(any()))
+        .thenAnswer(
+            invocation -> {
+              AnalysisCacheLookupRequest request = invocation.getArgument(0);
+              assertThat(request.getKey().getFingerprintHex()).isEqualTo(expectedHex);
+              AnalysisCacheLookupResponse response =
+                  buildResponse(
+                      request,
+                      LookupResult.LOOKUP_RESULT_HIT,
+                      ByteString.copyFromUtf8("some_value"));
+              return immediateFuture(response);
+            });
 
     AnalysisCacheInvalidator invalidator =
         new AnalysisCacheInvalidator(
@@ -111,10 +129,16 @@ public final class AnalysisCacheInvalidatorTest {
     PackedFingerprint fingerprint =
         FingerprintValueService.computeFingerprint(
             fingerprintService, objectCodecs, key, frontierNodeVersion);
+    String expectedHex = HEX.encode(fingerprint.toBytes());
 
     // Simulate a cache miss by returning an empty response.
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(fingerprint.toBytes())))
-        .thenReturn(immediateFuture(ByteString.EMPTY));
+    when(mockAnalysisCacheClient.lookup(any()))
+        .thenAnswer(
+            invocation -> {
+              AnalysisCacheLookupRequest request = invocation.getArgument(0);
+              assertThat(request.getKey().getFingerprintHex()).isEqualTo(expectedHex);
+              return immediateFuture(buildResponse(request, LookupResult.LOOKUP_RESULT_MISS, null));
+            });
 
     AnalysisCacheInvalidator invalidator =
         new AnalysisCacheInvalidator(
@@ -146,10 +170,22 @@ public final class AnalysisCacheInvalidatorTest {
             fingerprintService, objectCodecs, missKey, frontierNodeVersion);
 
     // Simulate a cache hit _and_ miss for looking up multiple keys.
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(hitFingerprint.toBytes())))
-        .thenReturn(immediateFuture(ByteString.copyFromUtf8("some_value")));
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(missFingerprint.toBytes())))
-        .thenReturn(immediateFuture(ByteString.EMPTY));
+    String hitHex = HEX.encode(hitFingerprint.toBytes());
+    String missHex = HEX.encode(missFingerprint.toBytes());
+    when(mockAnalysisCacheClient.lookup(any()))
+        .thenAnswer(
+            invocation -> {
+              AnalysisCacheLookupRequest request = invocation.getArgument(0);
+              String fingerprintHex = request.getKey().getFingerprintHex();
+              if (hitHex.equals(fingerprintHex)) {
+                return immediateFuture(
+                    buildResponse(
+                        request,
+                        LookupResult.LOOKUP_RESULT_HIT,
+                        ByteString.copyFromUtf8("some_value")));
+              }
+              return immediateFuture(buildResponse(request, LookupResult.LOOKUP_RESULT_MISS, null));
+            });
 
     AnalysisCacheInvalidator invalidator =
         new AnalysisCacheInvalidator(
@@ -251,11 +287,12 @@ public final class AnalysisCacheInvalidatorTest {
   public void lookupKeysToInvalidate_clientIdComparison(@TestParameter ClientIdTestCase testCase)
       throws Exception {
     TrivialKey key = new TrivialKey("key");
-    PackedFingerprint packedFingerprint =
-        FingerprintValueService.computeFingerprint(
-            fingerprintService, objectCodecs, key, frontierNodeVersion);
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(packedFingerprint.toBytes())))
-        .thenReturn(immediateFuture(ByteString.EMPTY));
+    when(mockAnalysisCacheClient.lookup(any()))
+        .thenAnswer(
+            invocation -> {
+              AnalysisCacheLookupRequest request = invocation.getArgument(0);
+              return immediateFuture(buildResponse(request, LookupResult.LOOKUP_RESULT_MISS, null));
+            });
 
     AnalysisCacheInvalidator invalidator =
         new AnalysisCacheInvalidator(
@@ -283,7 +320,18 @@ public final class AnalysisCacheInvalidatorTest {
   record TrivialKey(String text) implements SkyKey {
     @Override
     public SkyFunctionName functionName() {
-      throw new UnsupportedOperationException();
+      return SkyFunctionName.FOR_TESTING;
     }
+  }
+
+  private static AnalysisCacheLookupResponse buildResponse(
+      AnalysisCacheLookupRequest request, LookupResult result, @Nullable ByteString value) {
+    AnalysisCacheLookupResponse.Builder response =
+        AnalysisCacheLookupResponse.newBuilder().setKey(request.getKey()).setResult(result);
+    if (value != null) {
+      response.setValue(
+          AnalysisValue.newBuilder().setSerializedValue(value).setSizeBytes(value.size()).build());
+    }
+    return response.build();
   }
 }

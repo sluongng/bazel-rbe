@@ -46,6 +46,21 @@ sh_test(
 )
 
 sh_test(
+    name = "remote_analysis_cache_test",
+    size = "medium",
+    srcs = ["remote_analysis_cache_test.sh"],
+    data = [
+        ":remote_utils",
+        "//src/test/shell/bazel:test-deps",
+        "@bazel_tools//tools/bash/runfiles",
+        "@rules_java//toolchains:current_java_runtime",
+    ],
+    tags = [
+        "no_windows",
+    ],
+)
+
+sh_test(
     name = "build_without_the_bytes_test",
     size = "large",
     timeout = "eternal",

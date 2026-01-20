@@ -16,7 +16,9 @@ package com.google.devtools.build.remote.worker;
 
 import static com.google.devtools.build.lib.util.StringEncoding.unicodeToInternal;
 
+import com.google.common.base.Ascii;
 import com.google.common.flogger.GoogleLogger;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.proto.TopLevelTargetsMatchStatus;
 import com.google.devtools.build.lib.util.ResourceConverter;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.common.options.Converter;
@@ -232,7 +234,74 @@ public class RemoteWorkerOptions extends OptionsBase {
               + " invocation id. This is useful for testing only.")
   public boolean errorOnDuplicateDownloads;
 
+  @Option(
+      name = "analysis_cache_log_path",
+      defaultValue = "null",
+      converter = PathFragmentConverter.class,
+      documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
+      effectTags = {OptionEffectTag.UNKNOWN},
+      help = "If set, AnalysisCacheService will append request summaries to this file. Test-only.")
+  public PathFragment analysisCacheLogPath;
+
+  @Option(
+      name = "analysis_cache_match_status",
+      defaultValue = "match",
+      converter = AnalysisCacheMatchStatusConverter.class,
+      documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
+      effectTags = {OptionEffectTag.UNKNOWN},
+      help = "Match status returned by AnalysisCacheService.QueryTopLevelTargets. Test-only.")
+  public TopLevelTargetsMatchStatus analysisCacheMatchStatus;
+
+  @Option(
+      name = "analysis_cache_available_commits",
+      defaultValue = "null",
+      documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
+      effectTags = {OptionEffectTag.UNKNOWN},
+      allowMultiple = true,
+      help = "Commit SHAs with analysis cache data available. Test-only.")
+  public List<String> analysisCacheAvailableCommits;
+
+  @Option(
+      name = "analysis_cache_git_repo_path",
+      defaultValue = "null",
+      converter = PathFragmentConverter.class,
+      documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
+      effectTags = {OptionEffectTag.UNKNOWN},
+      help =
+          "Path to a git repository (can be bare) for diff-based invalidation in the analysis "
+              + "cache service. Test-only.")
+  public PathFragment analysisCacheGitRepoPath;
+
   private static final int MAX_JOBS = 16384;
+
+  private static final class AnalysisCacheMatchStatusConverter
+      extends Converter.Contextless<TopLevelTargetsMatchStatus> {
+    @Override
+    public TopLevelTargetsMatchStatus convert(String value) throws OptionsParsingException {
+      String normalized = Ascii.toLowerCase(value);
+      return switch (normalized) {
+        case "match", "match_status_match" -> TopLevelTargetsMatchStatus.MATCH_STATUS_MATCH;
+        case "no_match", "match_status_no_match" ->
+            TopLevelTargetsMatchStatus.MATCH_STATUS_NO_MATCH;
+        case "different_cl", "match_status_different_cl" ->
+            TopLevelTargetsMatchStatus.MATCH_STATUS_DIFFERENT_CL;
+        case "different_config", "match_status_different_config" ->
+            TopLevelTargetsMatchStatus.MATCH_STATUS_DIFFERENT_CONFIG;
+        case "different_cl_and_config", "match_status_different_cl_and_config" ->
+            TopLevelTargetsMatchStatus.MATCH_STATUS_DIFFERENT_CL_AND_CONFIG;
+        case "failure", "match_status_failure" -> TopLevelTargetsMatchStatus.MATCH_STATUS_FAILURE;
+        case "unspecified", "match_status_unspecified" ->
+            TopLevelTargetsMatchStatus.MATCH_STATUS_UNSPECIFIED;
+        default ->
+            throw new OptionsParsingException("Unknown analysis cache match status: " + value);
+      };
+    }
+
+    @Override
+    public String getTypeDescription() {
+      return "analysis cache match status";
+    }
+  }
 
   /**
    * Converter for jobs. Takes {@value FLAG_SYNTAX}. Values must be between 1 and {@value MAX_JOBS}.

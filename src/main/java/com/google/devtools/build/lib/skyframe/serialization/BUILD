@@ -61,6 +61,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib:runtime",
         "//src/main/java/com/google/devtools/build/lib/analysis:blaze_directories",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:remote_analysis_cache_client",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:grpc_remote_analysis_caching_services_supplier",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:remote_analysis_caching_services_supplier",
         "//src/main/java/com/google/devtools/build/lib/util:detailed_exit_code",
         "//third_party:error_prone_annotations",
@@ -99,6 +100,7 @@ java_library(
             "DeserializedSkyValue.java",
             "ErrorMessageHelper.java",
             "FrontierNodeVersion.java",
+            "GrpcFingerprintValueStore.java",
             "ModuleCodec.java",
             "SerializationRegistrySetupHelpers.java",
             "SerializationConstants.java",
@@ -118,8 +120,10 @@ java_library(
         ":write_statuses",
         "//src/main/java/com/google/devtools/build/lib/bugreport",
         "//src/main/java/com/google/devtools/build/lib/concurrent",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:client_id",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:remote_analysis_cache_client",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:remote_analysis_json_log_writer",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/autocodec:serialization-constant",
         "//src/main/java/com/google/devtools/build/lib/unsafe:string",
         "//src/main/java/com/google/devtools/build/lib/unsafe:unsafe-provider",
@@ -134,6 +138,20 @@ java_library(
         "//third_party/pprof:profile_java_proto",
         "@com_google_protobuf//:protobuf_java",
         "@zstd-jni",
+    ],
+)
+
+java_library(
+    name = "grpc_fingerprint_value_store",
+    srcs = ["GrpcFingerprintValueStore.java"],
+    deps = [
+        ":serialization",
+        ":write_statuses",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_grpc",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/proto:analysis_cache_service_java_proto",
+        "//third_party:guava",
+        "@com_google_protobuf//:protobuf_java",
+        "//third_party/grpc-java:grpc-jar",
     ],
 )
 
