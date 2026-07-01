@@ -22,6 +22,9 @@ import java.lang.invoke.MethodHandles;
 public final class Blocker {
 
   public static Object begin() {
+    if (IN_NATIVE_IMAGE) {
+      return null;
+    }
     try {
       return BEGIN.invoke();
     } catch (Throwable e) {
@@ -30,6 +33,9 @@ public final class Blocker {
   }
 
   public static void end(Object comp) {
+    if (IN_NATIVE_IMAGE) {
+      return;
+    }
     try {
       END.invoke(comp);
     } catch (Throwable e) {
@@ -37,9 +43,12 @@ public final class Blocker {
     }
   }
 
-  private static final MethodHandle BEGIN = getBegin();
+  private static final boolean IN_NATIVE_IMAGE =
+      System.getProperty("org.graalvm.nativeimage.imagecode") != null;
 
-  private static final MethodHandle END = getEnd();
+  private static final MethodHandle BEGIN = IN_NATIVE_IMAGE ? null : getBegin();
+
+  private static final MethodHandle END = IN_NATIVE_IMAGE ? null : getEnd();
 
   private static Class<?> blockerType() {
     return Runtime.version().feature() >= 23 ? boolean.class : long.class;

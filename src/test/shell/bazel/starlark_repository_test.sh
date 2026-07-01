@@ -3177,6 +3177,11 @@ EOF
 }
 
 function test_wasm_compilation() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    echo "Skipping compiled Wasm test under native-image: Chicory defines classes at runtime"
+    return
+  fi
+
   setup_starlark_repository
 
   declare -r exec_wasm="$(rlocation "io_bazel/src/test/shell/bazel/testdata/exec_wasm.wasm")"

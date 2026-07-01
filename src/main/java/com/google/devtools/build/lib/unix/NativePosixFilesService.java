@@ -218,8 +218,17 @@ public interface NativePosixFilesService extends BlazeService {
    * @return the value of the extended attribute associated with 'path', if any, or null if no such
    *     attribute is defined (ENODATA).
    * @throws IOException if the call failed for any other reason.
-   */
+  */
   byte[] lgetxattr(String path, String name) throws IOException;
+
+  /** Opens a file for reading and returns a native file descriptor. */
+  int openReadOnly(String path) throws IOException;
+
+  /** Reads from a native file descriptor. */
+  int read(int fd, byte[] bytes, int offset, int length) throws IOException;
+
+  /** Closes a native file descriptor. */
+  void close(int fd) throws IOException;
 
   /**
    * Deletes all directory trees recursively beneath the given path, which is expected to be a

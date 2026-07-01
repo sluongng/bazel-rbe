@@ -753,7 +753,9 @@ EOF
     && fail "expected build to fail" || true
 
   expect_log "^---8<---8<--- Start of log, file at /"
-  expect_log "Worker process did not return a WorkResponse:"
+  if ! grep -sq "Worker process did not return a WorkResponse:" "$TEST_log"; then
+    expect_log "Worker process returned an unparseable WorkResponse!"
+  fi
   expect_log "I'm a very poisoned worker and will just crash."
   expect_log "^---8<---8<--- End of log ---8<---8<---"
 }
@@ -782,7 +784,9 @@ EOF
     && fail "expected build to fail" || true
 
   expect_log "^---8<---8<--- Start of log, file at /"
-  expect_log "Worker process did not return a WorkResponse:"
+  if ! grep -sq "Worker process did not return a WorkResponse:" "$TEST_log"; then
+    expect_log "Worker process returned an unparseable WorkResponse!"
+  fi
   expect_log "Killing [a-zA-Z]\+ worker [0-9]\+ (pid [0-9]\+) because it is using more memory than the limit ([0-9,]\+ KB > 1,000 KB)"
   expect_log "^---8<---8<--- End of log ---8<---8<---"
 }

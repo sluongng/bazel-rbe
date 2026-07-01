@@ -266,6 +266,53 @@ Java_com_google_devtools_build_lib_unix_NativePosixFilesServiceImpl_readlink(
   return NewStringLatin1(env, target);
 }
 
+extern "C" JNIEXPORT jint JNICALL
+Java_com_google_devtools_build_lib_unix_NativePosixFilesServiceImpl_openReadOnly(
+    JNIEnv *env, jobject instance, jstring path) {
+  JStringLatin1Holder path_chars(env, path);
+  if (env->ExceptionOccurred()) {
+    return -1;
+  }
+  int fd;
+  RESTARTABLE(open(path_chars, O_RDONLY | O_CLOEXEC), fd);
+  if (fd == -1) {
+    POST_EXCEPTION_FROM_ERRNO(env, errno, path_chars);
+    return -1;
+  }
+  return fd;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_google_devtools_build_lib_unix_NativePosixFilesServiceImpl_read(
+    JNIEnv *env, jobject instance, jint fd, jbyteArray bytes, jint offset,
+    jint length) {
+  if (length == 0) {
+    return 0;
+  }
+  jbyte *buffer = env->GetByteArrayElements(bytes, nullptr);
+  if (buffer == nullptr) {
+    return -1;
+  }
+  ssize_t bytes_read;
+  RESTARTABLE(::read(fd, buffer + offset, length), bytes_read);
+  env->ReleaseByteArrayElements(bytes, buffer, bytes_read == -1 ? JNI_ABORT : 0);
+  if (bytes_read == -1) {
+    POST_EXCEPTION_FROM_ERRNO(env, errno, "read");
+    return -1;
+  }
+  return bytes_read;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_google_devtools_build_lib_unix_NativePosixFilesServiceImpl_close(
+    JNIEnv *env, jobject instance, jint fd) {
+  int result;
+  RESTARTABLE(::close(fd), result);
+  if (result == -1) {
+    POST_EXCEPTION_FROM_ERRNO(env, errno, "close");
+  }
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_google_devtools_build_lib_unix_NativePosixFilesServiceImpl_chmod(
     JNIEnv* env, jobject instance, jstring path, jint mode) {

@@ -121,13 +121,36 @@ final class StarlarkWasmModule implements StarlarkValue {
     this.allocFnName = allocFnName;
     this.hasInitializeFn = hasInitializeFn(wasmModule);
     if (compile) {
-      this.machineFactory = MachineFactoryCompiler.builder(wasmModule)
-          .withInterpreterFallback(InterpreterFallback.SILENT)
-          .withCache(compilationCache)
-          .compile();
+      Function<Instance, Machine> machineFactory;
+      try {
+        machineFactory =
+            MachineFactoryCompiler.builder(wasmModule)
+                .withInterpreterFallback(InterpreterFallback.SILENT)
+                .withCache(compilationCache)
+                .compile();
+      } catch (RuntimeException | Error e) {
+        if (!isNativeImageRuntimeClassLoadingError(e)) {
+          throw e;
+        }
+        // Native Image cannot define Chicory's generated compiler classes at runtime.
+        machineFactory = InterpreterMachine::new;
+      }
+      this.machineFactory = machineFactory;
     } else {
       this.machineFactory = InterpreterMachine::new;
     }
+  }
+
+  private static boolean isNativeImageRuntimeClassLoadingError(Throwable throwable) {
+    for (Throwable current = throwable; current != null; current = current.getCause()) {
+      String message = current.getMessage();
+      if (current.getClass().getName().equals("com.oracle.svm.core.jdk.UnsupportedFeatureError")
+          && message != null
+          && message.contains("Classes cannot be defined at runtime")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static boolean hasInitializeFn(WasmModule wasmModule) {

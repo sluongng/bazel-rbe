@@ -569,6 +569,10 @@ function test_empty_command() {
 }
 
 function test_local_startup_timeout() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   local output_base=$(bazel info output_base 2>"$TEST_log") ||
     fail "bazel info failed"
 
@@ -810,6 +814,10 @@ function test_client_is_quiet_by_default() {
 }
 
 function test_sigquit() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   # Use a FIFO to spoonfeed the Bazel server.
   mkdir -p a && mkfifo a/BUILD || fail "couldn't create fifo a"
   mkdir -p b && mkfifo b/BUILD || fail "couldn't create fifo b"

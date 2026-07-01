@@ -14,11 +14,19 @@
 
 package net.starlark.java.eval;
 
+import java.nio.file.Path;
+
 final class JNI {
   private JNI() {} // uninstantiable
 
   static void load() {
     try {
+      String nativeInstallBase = System.getProperty("bazel.native.install_base");
+      if (nativeInstallBase != null) {
+        System.load(
+            Path.of(nativeInstallBase, System.mapLibraryName("cpu_profiler")).toString());
+        return;
+      }
       System.loadLibrary("cpu_profiler");
     } catch (UnsatisfiedLinkError ex) {
       // Ignore, deferring the error until a C function is called, if ever.

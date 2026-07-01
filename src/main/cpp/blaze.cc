@@ -365,113 +365,118 @@ static string EscapeForOptionSource(const string &input) {
   return result;
 }
 
-// Returns the JVM command argument array.
+// Returns the server process command argument array.
 static vector<string> GetServerExeArgs(const blaze_util::Path &jvm_path,
                                        const string &server_jar_path,
                                        const vector<string> &archive_contents,
                                        const string &install_md5,
                                        const WorkspaceLayout &workspace_layout,
                                        const string &workspace,
-                                       const StartupOptions &startup_options) {
+                                       const StartupOptions &startup_options,
+                                       bool use_native_image_server = false) {
   vector<string> result;
 
   // e.g. A Blaze server process running in ~/src/build_root (where there's a
   // ~/src/build_root/WORKSPACE file) will appear in ps(1) as "blaze(src)".
   result.push_back(startup_options.GetLowercaseProductName() + "(" +
                    workspace_layout.GetPrettyWorkspaceName(workspace) + ")");
-  startup_options.AddJVMArgumentPrefix(jvm_path.GetParent().GetParent(),
-                                       &result);
 
-  // com.google.devtools.build.lib.unsafe.StringUnsafe uses reflection to
-  // access private fields in java.lang.String. The Bazel server requires Java
-  // 11, so this option is known to be supported.
-  result.push_back("--add-opens=java.base/java.lang=ALL-UNNAMED");
+  if (!use_native_image_server) {
+    startup_options.AddJVMArgumentPrefix(jvm_path.GetParent().GetParent(),
+                                         &result);
 
-  result.push_back("-XX:+UnlockDiagnosticVMOptions");
-  result.push_back("-XX:-BytecodeVerificationLocal");
-  result.push_back("-XX:-BytecodeVerificationRemote");
+    // com.google.devtools.build.lib.unsafe.StringUnsafe uses reflection to
+    // access private fields in java.lang.String. The Bazel server requires Java
+    // 11, so this option is known to be supported.
+    result.push_back("--add-opens=java.base/java.lang=ALL-UNNAMED");
 
-  vector<string> user_options = startup_options.host_jvm_args;
+    result.push_back("-XX:+UnlockDiagnosticVMOptions");
+    result.push_back("-XX:-BytecodeVerificationLocal");
+    result.push_back("-XX:-BytecodeVerificationRemote");
 
-  // Add JVM arguments particular to building blaze64 and particular JVM
-  // versions.
-  string error;
-  blaze_exit_code::ExitCode jvm_args_exit_code =
-      startup_options.AddJVMArguments(startup_options.GetServerJavabase(),
-                                      &result, user_options, &error);
-  if (jvm_args_exit_code != blaze_exit_code::SUCCESS) {
-    BAZEL_DIE(jvm_args_exit_code) << error;
-  }
+    vector<string> user_options = startup_options.host_jvm_args;
 
-  // We put all directories on java.library.path that contain .so/.dll files.
-  set<string> java_library_paths;
-  std::stringstream java_library_path;
-  java_library_path << "-Djava.library.path=";
-  blaze_util::Path real_install_dir =
-      blaze_util::Path(startup_options.install_base);
+    // Add JVM arguments particular to building blaze64 and particular JVM
+    // versions.
+    string error;
+    blaze_exit_code::ExitCode jvm_args_exit_code =
+        startup_options.AddJVMArguments(startup_options.GetServerJavabase(),
+                                        &result, user_options, &error);
+    if (jvm_args_exit_code != blaze_exit_code::SUCCESS) {
+      BAZEL_DIE(jvm_args_exit_code) << error;
+    }
 
-  for (const auto &it : archive_contents) {
-    if (IsSharedLibrary(it)) {
-      string libpath(real_install_dir.GetRelative(blaze_util::Dirname(it))
-                         .AsJvmArgument());
-      // Only add the library path if it's not added yet.
-      if (java_library_paths.insert(libpath).second) {
-        if (java_library_paths.size() > 1) {
-          java_library_path << kListSeparator;
+    // We put all directories on java.library.path that contain .so/.dll files.
+    set<string> java_library_paths;
+    std::stringstream java_library_path;
+    java_library_path << "-Djava.library.path=";
+    blaze_util::Path real_install_dir =
+        blaze_util::Path(startup_options.install_base);
+
+    for (const auto &it : archive_contents) {
+      if (IsSharedLibrary(it)) {
+        string libpath(real_install_dir.GetRelative(blaze_util::Dirname(it))
+                           .AsJvmArgument());
+        // Only add the library path if it's not added yet.
+        if (java_library_paths.insert(libpath).second) {
+          if (java_library_paths.size() > 1) {
+            java_library_path << kListSeparator;
+          }
+          java_library_path << libpath;
         }
-        java_library_path << libpath;
       }
     }
-  }
-  result.push_back(java_library_path.str());
+    result.push_back(java_library_path.str());
 
-  // TODO: Investigate whether this still has any effect. File name encoding
-  // is governed by sun.jnu.encoding in JDKs with JEP 400, which can't be
-  // influenced by setting a property.
-  result.push_back("-Dfile.encoding=ISO-8859-1");
-  // Force into the root locale to ensure consistent behavior of string
-  // operations across machines (e.g. in the tr_TR locale, capital ASCII 'I'
-  // turns into a special Unicode 'i' when converted to lower case).
-  // https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/Locale.html#ROOT
-  result.push_back("-Duser.country=");
-  result.push_back("-Duser.language=");
-  result.push_back("-Duser.variant=");
+    // TODO: Investigate whether this still has any effect. File name encoding
+    // is governed by sun.jnu.encoding in JDKs with JEP 400, which can't be
+    // influenced by setting a property.
+    result.push_back("-Dfile.encoding=ISO-8859-1");
+    // Force into the root locale to ensure consistent behavior of string
+    // operations across machines (e.g. in the tr_TR locale, capital ASCII 'I'
+    // turns into a special Unicode 'i' when converted to lower case).
+    // https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/Locale.html#ROOT
+    result.push_back("-Duser.country=");
+    result.push_back("-Duser.language=");
+    result.push_back("-Duser.variant=");
 
-  // Allow more files to be watched per directory than the default limit of 500.
-  // The limit of 10,000 is arbitrary, but should be sufficient for most cases
-  // and can always be increased by the user if necessary.
-  // https://github.com/openjdk/jdk/blob/2faf8b8d582183275b1fdc92313a1c63c1753e80/src/java.base/share/classes/sun/nio/fs/AbstractWatchKey.java#L40
-  result.push_back("-Djdk.nio.file.WatchService.maxEventsPerPoll=10000");
+    // Allow more files to be watched per directory than the default limit of
+    // 500. The limit of 10,000 is arbitrary, but should be sufficient for most
+    // cases and can always be increased by the user if necessary.
+    // https://github.com/openjdk/jdk/blob/2faf8b8d582183275b1fdc92313a1c63c1753e80/src/java.base/share/classes/sun/nio/fs/AbstractWatchKey.java#L40
+    result.push_back("-Djdk.nio.file.WatchService.maxEventsPerPoll=10000");
 
-  // Disable warnings about unsafe memory access, which still occurs in
-  // protobuf.
-  // TODO: Drop this when protobuf uses VarHandle.
-  result.push_back("-Dsun.misc.unsafe.memory.access=allow");
+    // Disable warnings about unsafe memory access, which still occurs in
+    // protobuf.
+    // TODO: Drop this when protobuf uses VarHandle.
+    result.push_back("-Dsun.misc.unsafe.memory.access=allow");
 
-  // Let the system decide whether to prefer IPv6
-  result.push_back("-Djava.net.preferIPv6Addresses=system");
+    // Let the system decide whether to prefer IPv6
+    result.push_back("-Djava.net.preferIPv6Addresses=system");
 
 #if defined(_WIN32)
-  // See and use more than 64 CPUs on Windows.
-  // https://bugs.openjdk.org/browse/JDK-6942632
-  result.push_back("-XX:+IgnoreUnrecognizedVMOptions");
-  result.push_back("-XX:+UseAllWindowsProcessorGroups");
+    // See and use more than 64 CPUs on Windows.
+    // https://bugs.openjdk.org/browse/JDK-6942632
+    result.push_back("-XX:+IgnoreUnrecognizedVMOptions");
+    result.push_back("-XX:+UseAllWindowsProcessorGroups");
 #endif
 
-  if (startup_options.host_jvm_debug) {
-    BAZEL_LOG(USER)
-        << "Running host JVM under debugger (listening on TCP port 5005).";
-    // Start JVM so that it listens for a connection from a
-    // JDWP-compliant debugger:
-    result.push_back(
-        "-agentlib:jdwp=transport=dt_socket,server=y,address=5005");
+    if (startup_options.host_jvm_debug) {
+      BAZEL_LOG(USER)
+          << "Running host JVM under debugger (listening on TCP port 5005).";
+      // Start JVM so that it listens for a connection from a
+      // JDWP-compliant debugger:
+      result.push_back(
+          "-agentlib:jdwp=transport=dt_socket,server=y,address=5005");
+    }
+    result.insert(result.end(), user_options.begin(), user_options.end());
+
+    startup_options.AddJVMArgumentSuffix(real_install_dir, server_jar_path,
+                                         &result);
   }
-  result.insert(result.end(), user_options.begin(), user_options.end());
 
-  startup_options.AddJVMArgumentSuffix(real_install_dir, server_jar_path,
-                                       &result);
-
-  // JVM arguments are complete. Now pass in Blaze startup options.
+  // Executable-specific arguments are complete. Now pass in Blaze startup
+  // options.
   // Note that we always use the --flag=ARG form (instead of the --flag ARG
   // one) so that BlazeRuntime#splitStartupOptions has an easy job.
 
@@ -1543,6 +1548,18 @@ static void RunLauncher(const string& self_path,
 
   EnsureCorrectRunningVersion(startup_options, logging_info, blaze_server);
 
+#if defined(BAZEL_NATIVE_IMAGE_SERVER)
+  const string server_jar_path = GetServerJarPath(archive_contents);
+  const blaze_util::Path jvm_path;
+  const blaze_util::Path server_exe =
+      blaze_util::Path(startup_options.install_base)
+          .GetRelative("A-server-native");
+
+  vector<string> server_exe_args =
+      GetServerExeArgs(jvm_path, server_jar_path, archive_contents, install_md5,
+                       workspace_layout, workspace, startup_options,
+                       /*use_native_image_server=*/true);
+#else
   const blaze_util::Path jvm_path = startup_options.GetJvm();
   const string server_jar_path = GetServerJarPath(archive_contents);
 
@@ -1552,6 +1569,7 @@ static void RunLauncher(const string& self_path,
   vector<string> server_exe_args =
       GetServerExeArgs(jvm_path, server_jar_path, archive_contents, install_md5,
                        workspace_layout, workspace, startup_options);
+#endif
 #if defined(__OpenBSD__)
   // When spawning the server's JVM process, we normally set argv[0] to
   // "bazel(workspace)". On OpenBSD, doing so causes the JVM process to fail

@@ -220,9 +220,7 @@ public abstract class CompressedTarFunction implements Decompressor {
 
     @Override
     public Iterator<Charset> charsets() {
-      // This charset is only meant for internal use within CompressedTarFunction and thus should
-      // not be discoverable.
-      return Collections.emptyIterator();
+      return Collections.singleton(CHARSET).iterator();
     }
 
     @Override

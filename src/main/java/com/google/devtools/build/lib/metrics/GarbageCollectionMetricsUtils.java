@@ -26,6 +26,7 @@ public final class GarbageCollectionMetricsUtils {
         || "Tenured Gen".equals(name)
         || "Shenandoah".equals(name)
         || "Shenandoah Old Gen".equals(name)
+        || "old generation space".equals(name)
         || "ZHeap".equals(name)
         || "ZGC Old Generation".equals(name);
   }

@@ -344,6 +344,239 @@ genrule(
     }),
 )
 
+genrule(
+    name = "bazel-server-native-image",
+    srcs = [
+        "bazel_server_native_jni_config.json",
+        "bazel_server_native_reflect_config.json",
+        "//src/main/java/com/google/devtools/build/lib/bazel:BazelServer_deploy.jar",
+    ],
+    outs = [
+        "A-server-native",
+        "libmanagement_ext.so",
+    ],
+    cmd = """
+set -euo pipefail
+: "$${GRAALVM_HOME:?Set GRAALVM_HOME to a GraalVM 25.1.3+ installation with native-image}"
+server_deploy_jar="$(location //src/main/java/com/google/devtools/build/lib/bazel:BazelServer_deploy.jar)"
+jar_entries="$(@D)/bazel_server_deploy_jar_entries.txt"
+caffeine_reflect_config="$(@D)/caffeine_reflect_config.json"
+proto_reflect_prefixes="$(@D)/proto_reflect_prefixes.txt"
+proto_reflect_classes="$(@D)/proto_reflect_classes.txt"
+proto_reflect_config="$(@D)/proto_reflect_config.json"
+options_reflect_config="$(@D)/options_reflect_config.json"
+converter_reflect_config="$(@D)/converter_reflect_config.json"
+rule_reflect_config="$(@D)/rule_reflect_config.json"
+starlark_reflect_config="$(@D)/starlark_reflect_config.json"
+bazel_methods_reflect_config="$(@D)/bazel_methods_reflect_config.json"
+bazel_fields_reflect_config="$(@D)/bazel_fields_reflect_config.json"
+gson_reflect_config="$(@D)/gson_reflect_config.json"
+bzlmod_reflect_config="$(@D)/bzlmod_reflect_config.json"
+dynamic_proxy_config="$(@D)/dynamic_proxy_config.json"
+"$${GRAALVM_HOME}/bin/jar" tf "$${server_deploy_jar}" > "$${jar_entries}"
+cat > "$${dynamic_proxy_config}" <<'EOF'
+[
+  ["java.lang.reflect.TypeVariable"]
+]
+EOF
+awk '/OrBuilder[.]class$$/ { name = $$0; sub(/OrBuilder[.]class$$/, "", name); print name }' "$${jar_entries}" | \\
+  sort -u > "$${proto_reflect_prefixes}"
+awk '
+  NR == FNR { prefixes[$$0] = 1; next }
+  /[.]class$$/ {
+    for (prefix in prefixes) {
+      if (index($$0, prefix) == 1) {
+        rest = substr($$0, length(prefix) + 1)
+        if (rest == ".class" || rest == "OrBuilder.class" || substr(rest, 1, 1) == sprintf("%c", 36)) {
+          print $$0
+          next
+        }
+      }
+    }
+  }
+' "$${proto_reflect_prefixes}" "$${jar_entries}" | sort -u > "$${proto_reflect_classes}"
+awk '
+  BEGIN { print "["; first = 1 }
+  {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredConstructors\\":true,\\"allDeclaredFields\\":true,\\"allDeclaredMethods\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${proto_reflect_classes}" > "$${proto_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /^com\\/google\\/devtools\\/(build|common)\\// && /(^|\\/)[^\\/]*(Options|Option)[^\\/]*[.]class$$/ {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredConstructors\\":true,\\"allDeclaredFields\\":true,\\"allDeclaredMethods\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${options_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /(^|\\/)[^\\/]*Converter[^\\/]*[.]class$$/ {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredConstructors\\":true,\\"allDeclaredFields\\":true,\\"allDeclaredMethods\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${converter_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /^com\\/google\\/devtools\\/build\\/lib\\/(analysis|rules|bazel\\/rules)\\// && /[.]class$$/ {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredConstructors\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${rule_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /^net\\/starlark\\/java\\/(annot|eval|syntax|lib)\\// && /[.]class$$/ {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredConstructors\\":true,\\"allDeclaredFields\\":true,\\"allDeclaredMethods\\":true,\\"allPublicMethods\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${starlark_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /^com\\/google\\/devtools\\/(build\\/lib|common\\/options)\\// && /[.]class$$/ {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredMethods\\":true,\\"allPublicMethods\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${bazel_methods_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /^com\\/google\\/devtools\\/(build\\/lib|common\\/options)\\// && /[.]class$$/ {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredFields\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${bazel_fields_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /(^|\\/)GsonTypeAdapter[^\\/]*[.]class$$/ || /_GsonTypeAdapter[.]class$$/ || /[$$]GsonTypeAdapter[.]class$$/ {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredConstructors\\":true,\\"allDeclaredFields\\":true,\\"allDeclaredMethods\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${gson_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /^com\\/google\\/devtools\\/build\\/lib\\/bazel\\/bzlmod\\// && /[.]class$$/ {
+    name = $$0
+    sub(/[.]class$$/, "", name)
+    gsub(/\\//, ".", name)
+    if (!first) { print "," }
+    first = 0
+    printf "  {\\"name\\":\\"%s\\",\\"allDeclaredConstructors\\":true,\\"allDeclaredFields\\":true,\\"allDeclaredMethods\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${bzlmod_reflect_config}"
+awk '
+  BEGIN { print "["; first = 1 }
+  /^com\\/github\\/benmanes\\/caffeine\\/cache\\/[A-Z0-9]+[.]class$$/ {
+      name = $$0
+      sub(/[.]class$$/, "", name)
+      gsub(/\\//, ".", name)
+      if (!first) { print "," }
+      first = 0
+      printf "  {\\"name\\":\\"%s\\",\\"allDeclaredConstructors\\":true,\\"allDeclaredFields\\":true,\\"allDeclaredMethods\\":true}", name
+  }
+  END { print ""; print "]" }
+' "$${jar_entries}" > "$${caffeine_reflect_config}"
+"$${GRAALVM_HOME}/bin/native-image" \\
+  -Dfile.encoding=ISO-8859-1 \\
+  -Dnative.encoding=UTF-8 \\
+  -Dsun.jnu.encoding=UTF-8 \\
+  --add-opens=java.base/java.lang=ALL-UNNAMED \\
+  --add-exports=java.base/jdk.internal.misc=ALL-UNNAMED \\
+  --enable-native-access=ALL-UNNAMED \\
+  -H:+UnlockExperimentalVMOptions \\
+  -H:DefaultCharset=ISO-8859-1 \\
+  -H:+ReportExceptionStackTraces \\
+  -H:ReflectionConfigurationFiles="$(location bazel_server_native_reflect_config.json),$${caffeine_reflect_config},$${proto_reflect_config},$${options_reflect_config},$${converter_reflect_config},$${rule_reflect_config},$${starlark_reflect_config},$${bazel_methods_reflect_config},$${bazel_fields_reflect_config},$${gson_reflect_config},$${bzlmod_reflect_config}" \\
+  -H:JNIConfigurationFiles="$(location bazel_server_native_jni_config.json)" \\
+  -H:DynamicProxyConfigurationFiles="$${dynamic_proxy_config}" \\
+  -H:IncludeResources='.*' \\
+  -march=x86-64-v2 \\
+  -o "$(@D)/A-server-native" \\
+  -cp "$${server_deploy_jar}" \\
+  com.google.devtools.build.lib.bazel.Bazel
+""",
+    local = True,
+    tags = [
+        "local",
+        "manual",
+    ],
+)
+
+genrule(
+    name = "install_base_key-file_native",
+    srcs = [
+        ":bazel-server-native-image",
+        ":install_base_key-file_jdk_allmodules",
+    ],
+    outs = ["install_base_key_native"],
+    cmd = "$(location :md5) $(SRCS) > $@",
+    tools = [
+        ":md5",
+    ],
+)
+
+genrule(
+    name = "package-zip_native",
+    srcs = [
+        ":embedded_tools_jdk_allmodules.zip",
+        "//src/main/java/com/google/devtools/build/lib/bazel:BazelServer_deploy.jar",
+        "install_base_key_native",
+        "//:platforms-srcs",
+        ":bazel-server-native-image",
+        "//src/main/java/net/starlark/java/eval:cpu_profiler_jni",
+        "//src/main/tools:process-wrapper",
+        "//src/main/tools:linux-sandbox",
+        "//tools/osx:xcode-locator",
+    ] + select({
+        "//src/conditions:windows": [],
+        "//conditions:default": [
+            "//src/main/tools:daemonize",
+        ],
+    }),
+    outs = ["package_native.zip"],
+    cmd = "$(location :package_bazel_on_host_platform) $@ $(SRCS)",
+    tools = [":package_bazel_on_host_platform"],
+)
+
 [genrule(
     name = "bazel-bin" + suffix,
     srcs = [
@@ -373,6 +606,21 @@ genrule(
     ("_notools", "_notools"),
     ("_nojdk", "_nojdk"),
 ]]
+
+genrule(
+    name = "bazel-bin_native",
+    srcs = [
+        "//src/main/cpp:client_native_image_server",
+        ":package-zip_native",
+    ],
+    outs = ["bazel_native"],
+    cmd = "rm -f $@; cat $(location //src/main/cpp:client_native_image_server) $(location :package-zip_native) > $@ && zip -qA $@ && chmod a+x $@",
+    executable = 1,
+    output_to_bindir = 1,
+    visibility = [
+        "//src/test:__subpackages__",
+    ],
+)
 
 # Build an executable named `bazel.exe`.
 # Works on all platforms but only makes sense on Windows.

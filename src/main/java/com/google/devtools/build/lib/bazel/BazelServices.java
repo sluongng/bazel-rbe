@@ -14,13 +14,29 @@
 package com.google.devtools.build.lib.bazel;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.platform.PlatformNativeDepsService;
+import com.google.devtools.build.lib.profiler.SystemNetworkStatsService;
 import com.google.devtools.build.lib.runtime.BlazeService;
+import com.google.devtools.build.lib.skyframe.FsEventsNativeDepsService;
+import com.google.devtools.build.lib.unix.ProcessUtilsService;
+import com.google.devtools.common.options.OptionsProvider;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.function.IntConsumer;
 
 /** Services that are used in Bazel */
 @SuppressWarnings("UnnecessarilyFullyQualified") // Class names fully qualified for clarity.
 public final class BazelServices {
 
   public static final ImmutableList<BlazeService> BAZEL_SERVICES =
+      isNativeImage() ? nativeImageServices() : jvmServices();
+
+  private static ImmutableList<BlazeService> jvmServices() {
+    return
       ImmutableList.of(
           new com.google.devtools.build.lib.skyframe.FsEventsNativeDepsServiceImpl(),
           new com.google.devtools.build.lib.platform.PlatformNativeDepsServiceImpl(),
@@ -31,6 +47,128 @@ public final class BazelServices {
           new com.google.devtools.build.lib.server.GrpcCommandServerServiceImpl(),
           new com.google.devtools.build.lib.starlarkprofiler.CpuProfilerServiceImpl(),
           new com.google.devtools.build.lib.util.ServerLogPathServiceImpl());
+  }
+
+  private static ImmutableList<BlazeService> nativeImageServices() {
+    return ImmutableList.of(
+        new NativeImageFsEventsNativeDepsService(),
+        new NativeImagePlatformNativeDepsService(),
+        new NativeImageSystemNetworkStatsService(),
+        new com.google.devtools.build.lib.profiler.TraceProfilerServiceImpl(),
+        new com.google.devtools.build.lib.unix.NativePosixFilesServiceImpl(),
+        new NativeImageProcessUtilsService(),
+        new com.google.devtools.build.lib.server.GrpcCommandServerServiceImpl(),
+        new com.google.devtools.build.lib.starlarkprofiler.CpuProfilerServiceImpl(),
+        new com.google.devtools.build.lib.util.ServerLogPathServiceImpl());
+  }
+
+  private static boolean isNativeImage() {
+    return System.getProperty("org.graalvm.nativeimage.imagecode") != null;
+  }
+
+  private static final class NativeImageFsEventsNativeDepsService
+      implements FsEventsNativeDepsService {
+    @Override
+    public void createFsEvents(byte[][] paths, byte[][] excludedPaths, double latency) {}
+
+    @Override
+    public void runFsEvents(CountDownLatch listening) {
+      listening.countDown();
+    }
+
+    @Override
+    public void doCloseFsEvents() {}
+
+    @Override
+    public byte[][] pollFsEvents() {
+      return null;
+    }
+  }
+
+  private static final class NativeImagePlatformNativeDepsService
+      implements PlatformNativeDepsService {
+    @Override
+    public int pushDisableSleep() {
+      return -1;
+    }
+
+    @Override
+    public int popDisableSleep() {
+      return -1;
+    }
+
+    @Override
+    public void registerCPUSpeedJni(IntConsumer callback) {}
+
+    @Override
+    public int cpuSpeed() {
+      return -1;
+    }
+
+    @Override
+    public void registerDiskSpaceJni(IntConsumer callback) {}
+
+    @Override
+    public void registerLoadAdvisoryJni(IntConsumer callback) {}
+
+    @Override
+    public int systemLoadAdvisory() {
+      return -1;
+    }
+
+    @Override
+    public void registerMemoryPressureJni(IntConsumer callback) {}
+
+    @Override
+    public int systemMemoryPressure() {
+      return -1;
+    }
+
+    @Override
+    public void registerSuspensionJni(IntConsumer callback) {}
+
+    @Override
+    public void registerThermalJni(IntConsumer callback) {}
+
+    @Override
+    public int thermalLoad() {
+      return -1;
+    }
+  }
+
+  private static final class NativeImageSystemNetworkStatsService
+      implements SystemNetworkStatsService {
+    @Override
+    public Map<String, NetIoCounter> getNetIoCounters() throws IOException {
+      return ImmutableMap.of();
+    }
+  }
+
+  private static final class NativeImageProcessUtilsService implements ProcessUtilsService {
+    @Override
+    public void globalInit(OptionsProvider startupOptions, Iterable<BlazeService> blazeServices) {
+      ProcessUtilsService.registerJniService(this);
+    }
+
+    @Override
+    public int getgid() {
+      return getProcSelfId("gid");
+    }
+
+    @Override
+    public int getuid() {
+      return getProcSelfId("uid");
+    }
+
+    private static int getProcSelfId(String attribute) {
+      try {
+        return ((Number) Files.getAttribute(Path.of("/proc/self"), "unix:" + attribute))
+            .intValue();
+      } catch (IOException | UnsupportedOperationException e) {
+        throw new UnsupportedOperationException(e);
+      }
+    }
+  }
 
   private BazelServices() {}
 }

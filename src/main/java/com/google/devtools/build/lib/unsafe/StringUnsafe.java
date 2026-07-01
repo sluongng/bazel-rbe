@@ -13,6 +13,9 @@
 // limitations under the License.
 package com.google.devtools.build.lib.unsafe;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static java.nio.charset.StandardCharsets.UTF_16LE;
+
 import com.google.common.base.Ascii;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -39,6 +42,8 @@ public final class StringUnsafe {
   private static final MethodHandle HAS_NEGATIVES;
   private static final VarHandle VALUE_HANDLE;
   private static final VarHandle CODE_HANDLE;
+  private static final boolean IN_NATIVE_IMAGE =
+      System.getProperty("org.graalvm.nativeimage.imagecode") != null;
 
   static {
     try {
@@ -63,6 +68,9 @@ public final class StringUnsafe {
 
   /** Returns the coder used for this string. See {@link #LATIN1} and {@link #UTF16}. */
   public static byte getCoder(String obj) {
+    if (IN_NATIVE_IMAGE) {
+      return obj.chars().allMatch(c -> c <= 0xFF) ? LATIN1 : UTF16;
+    }
     return (byte) CODE_HANDLE.get(obj);
   }
 
@@ -73,6 +81,9 @@ public final class StringUnsafe {
    * Ensure you do not mutate this byte array in any way.
    */
   public static byte[] getByteArray(String obj) {
+    if (IN_NATIVE_IMAGE) {
+      return obj.getBytes(getCoder(obj) == LATIN1 ? ISO_8859_1 : UTF_16LE);
+    }
     return (byte[]) VALUE_HANDLE.get(obj);
   }
 
@@ -83,6 +94,16 @@ public final class StringUnsafe {
    * <p>Callers must not mutate the returned byte array.
    */
   public static byte[] getInternalStringBytes(String obj) {
+    if (IN_NATIVE_IMAGE) {
+      if (getCoder(obj) != LATIN1) {
+        String truncatedString = Ascii.truncate(obj, 1000, "...");
+        throw new IllegalArgumentException(
+            String.format(
+                "Expected internal string with Latin-1 coder, got: %s (%s)",
+                truncatedString, Arrays.toString(getByteArray(truncatedString))));
+      }
+      return obj.getBytes(ISO_8859_1);
+    }
     // This is both a performance optimization and a correctness check: internal strings must
     // always be coded in Latin-1, otherwise they have been constructed out of a non-ASCII string
     // that hasn't been converted to internal encoding.
@@ -99,6 +120,9 @@ public final class StringUnsafe {
 
   /** Returns whether the string is ASCII-only. */
   public static boolean isAscii(String obj) {
+    if (IN_NATIVE_IMAGE) {
+      return obj.chars().allMatch(c -> c <= 0x7F);
+    }
     // This implementation uses java.lang.StringCoding#hasNegatives, which is implemented as a JVM
     // intrinsic. On a machine with 512-bit SIMD registers, this is 5x as fast as a naive loop
     // over getByteArray(obj), which in turn is 5x as fast as obj.chars().anyMatch(c -> c > 0x7F) in
@@ -124,6 +148,9 @@ public final class StringUnsafe {
    * method.
    */
   public static String newInstance(byte[] bytes, byte coder) {
+    if (IN_NATIVE_IMAGE) {
+      return new String(bytes, coder == LATIN1 ? ISO_8859_1 : UTF_16LE);
+    }
     try {
       return (String) CONSTRUCTOR.invokeExact(bytes, coder);
     } catch (Throwable e) {

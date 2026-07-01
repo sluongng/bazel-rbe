@@ -80,6 +80,15 @@ public final class MemoryPressureListenerTest {
   }
 
   @Test
+  public void findBeans_nativeImageOldGenerationSpace() {
+    NotificationBean nativeImageBean = mock(NotificationBean.class);
+    when(nativeImageBean.getMemoryPoolNames()).thenReturn(new String[] {"old generation space"});
+
+    assertThat(MemoryPressureListener.findTenuredCollectorBeans(ImmutableList.of(nativeImageBean)))
+        .containsExactly(nativeImageBean);
+  }
+
+  @Test
   public void createFromBeans_throwsIfNoTenuredSpaceBean() {
     assertThrows(
         IllegalStateException.class,

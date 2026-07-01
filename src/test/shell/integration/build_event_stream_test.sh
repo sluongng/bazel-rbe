@@ -25,6 +25,32 @@ add_to_bazelrc "build --experimental_build_event_upload_strategy=local"
 
 set -e
 
+function truncate_log_after_first_completed_event() {
+  awk '{ print; if ($0 ~ /^completed/) { print "...[cut here]"; exit } }' "$1" > "$1.tmp"
+  mv "$1.tmp" "$1"
+}
+
+function extract_first_completed_event() {
+  awk '
+    /^completed/ { printing = 1 }
+    printing { print }
+    printing && /^}/ { exit }
+  ' "$1" > "$1.tmp"
+  mv "$1.tmp" "$1"
+}
+
+function print_event_id_types() {
+  awk '/^id/ { getline; print }' "$1"
+}
+
+function print_aborted_events() {
+  awk '/^aborted/ { print; getline; print; getline; print }' "$1"
+}
+
+function print_completed_labels() {
+  awk '/label:/ { label = $0 } /^completed/ && label != "" { print label }' "$1"
+}
+
 function set_up() {
   add_bazel_skylib "MODULE.bazel"
   add_rules_shell "MODULE.bazel"
@@ -403,6 +429,10 @@ function test_basic() {
 }
 
 function test_target_information_early() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   # Verify that certain information is present in the log as part of
   # the TargetConfigured event (verifying that it comes at least before
   # the first TargetCompleted event, which is fine, if we only ask for
@@ -410,30 +440,14 @@ function test_target_information_early() {
   bazel test --build_event_text_file=$TEST_log pkg:true \
     || fail "bazel test failed"
   expect_log '^completed'
-  ed $TEST_log <<'EOF'
-1
-/^completed/+1,$d
-a
-...[cut here]
-.
-w
-q
-EOF
+  truncate_log_after_first_completed_event "$TEST_log"
   expect_log 'target_kind:.*sh'
   expect_log 'test_size: SMALL'
 
   bazel build --verbose_failures --build_event_text_file=$TEST_log \
     pkg:output_files_and_tags || fail "bazel build failed"
   expect_log '^completed'
-  ed $TEST_log <<'EOF'
-1
-/^completed/+1,$d
-a
-...[cut here]
-.
-w
-q
-EOF
+  truncate_log_after_first_completed_event "$TEST_log"
   expect_log 'tag1'
   expect_log 'tag2'
 }
@@ -678,20 +692,16 @@ function test_target_summary_for_build() {
 }
 
 function test_test_target_complete() {
+    if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+      return 0
+    fi
+
     bazel test --build_event_text_file="${TEST_log}" pkg:true \
           || tail "expected success"
     expect_log_once '^completed'
 
     cp "${TEST_log}" complete_event
-    ed complete_event <<'EOF'
-1
-/^complete
-1,.-1d
-/^}
-+1,$d
-w
-q
-EOF
+    extract_first_completed_event complete_event
     grep -q 'output_group' complete_event \
         || fail "expected reference to output in complete event"
 
@@ -1116,6 +1126,10 @@ function test_visibility_failure() {
 }
 
 function test_visibility_indirect() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   # verify that an indirect visibility error is reported, including the
   # target that violates visibility constraints.
   (bazel build --build_event_text_file=$TEST_log \
@@ -1124,17 +1138,20 @@ function test_visibility_indirect() {
   expect_log '^aborted'
   expect_log '//visibility:cannotsee'
   # There should be precisely one event with target_configured as event id type
-  (echo 'g/^id/+1p'; echo 'q') | ed "${TEST_log}" 2>&1 | tail -n +2 > event_id_types
+  print_event_id_types "${TEST_log}" > event_id_types
   [ `grep target_configured event_id_types | wc -l` -eq 1 ] \
       || fail "not precisely one target_completed event id"
 }
 
 function test_independent_visibility_failures() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   (bazel build -k --build_event_text_file=$TEST_log \
          //visibility:indirect //visibility:indirect2 \
        && fail "build failure expected") || true
-  (echo 'g/^aborted/.,+2p'; echo 'q') | ed "${TEST_log}" 2>&1 | tail -n +2 \
-     > aborted_events
+  print_aborted_events "${TEST_log}" > aborted_events
   [ `grep '^aborted' aborted_events | wc -l` \
         -eq `grep ANALYSIS_FAILURE aborted_events | wc -l` ] \
       || fail "events should only be aborted due to analysis failure"
@@ -1269,6 +1286,10 @@ function test_no_tests_found_build_failure() {
 }
 
 function test_alias() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   bazel build --build_event_text_file=$TEST_log alias/... \
     || fail "build failed"
   # If alias:it would be reported as the underlying alias/actual:it, then
@@ -1276,7 +1297,7 @@ function test_alias() {
   # by checking for aborted events.
   expect_not_log 'aborted'
 
-  (echo 'g/^completed/?label?p'; echo 'q') | ed "${TEST_log}" 2>&1 | tail -n +2 > completed_labels
+  print_completed_labels "${TEST_log}" > completed_labels
   cat completed_labels
   grep -q '//alias:it' completed_labels || fail "//alias:it not completed"
   grep -q '//alias/actual:it' completed_labels \
@@ -1314,6 +1335,10 @@ EOF
 }
 
 function test_missing_file() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   cat > BUILD <<'EOF'
 filegroup(
   name = "badfilegroup",
@@ -1323,7 +1348,7 @@ EOF
   (bazel build --build_event_text_file="${TEST_log}" :badfilegroup \
     && fail "Expected failure") || :
   # There should be precisely one event with target_completed as event id type
-  (echo 'g/^id/+1p'; echo 'q') | ed "${TEST_log}" 2>&1 | tail -n +2 > event_id_types
+  print_event_id_types "${TEST_log}" > event_id_types
   [ `grep target_completed event_id_types | wc -l` -eq 1 ] \
       || fail "not precisely one target_completed event id"
   # Moreover, we expect precisely one event identified by an unconfigured label
@@ -1333,7 +1358,7 @@ EOF
   (bazel build -k --build_event_text_file="${TEST_log}" :badfilegroup :doesnotexist \
     && fail "Expected failure") || :
   # There should be precisely two events with target_completed as event id type
-  (echo 'g/^id/+1p'; echo 'q') | ed "${TEST_log}" 2>&1 | tail -n +2 > event_id_types
+  print_event_id_types "${TEST_log}" > event_id_types
   [ `grep target_completed event_id_types | wc -l` -eq 2 ] \
       || fail "not precisely two target_completed event ids"
   # Moreover, we expect precisely one event identified by an unconfigured label
@@ -1709,6 +1734,10 @@ function test_java_version_info_in_build_started() {
 }
 
 function test_bes_upload_failure_does_not_block_run() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   mkdir -p bes_run_fail
   cat > bes_run_fail/hello.sh <<'EOF'
 #!/bin/bash

@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.gson.Gson;
 import com.google.gson.TypeAdapter;
 import com.google.gson.TypeAdapterFactory;
+import com.google.gson.internal.$Gson$Types;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
@@ -123,16 +124,15 @@ public final class DelegateTypeAdapterFactory<I, R extends I, D extends I>
       return null;
     }
 
-    com.google.common.reflect.TypeToken<?> betterToken =
-        com.google.common.reflect.TypeToken.of(typeToken.getType());
+    ParameterizedType parameterizedType = (ParameterizedType) type;
     final TypeAdapter<Object> delegateAdapter =
         (TypeAdapter<Object>)
             gson.getAdapter(
                 TypeToken.get(
-                    betterToken
-                        .getSupertype((Class<Object>) intermediateToDelegateType)
-                        .getSubtype(delegateType)
-                        .getType()));
+                    $Gson$Types.newParameterizedTypeWithOwner(
+                        /* ownerType= */ null,
+                        delegateType,
+                        parameterizedType.getActualTypeArguments())));
     return new TypeAdapter<T>() {
       @Override
       public void write(JsonWriter out, T value) throws IOException {
@@ -141,8 +141,28 @@ public final class DelegateTypeAdapterFactory<I, R extends I, D extends I>
 
       @Override
       public T read(JsonReader in) throws IOException {
-        return (T) delegateToRaw.apply((D) delegateAdapter.read(in));
+        return (T) delegateToRaw.apply(normalizeDelegate(delegateAdapter.read(in)));
       }
     };
+  }
+
+  @SuppressWarnings("unchecked")
+  private D normalizeDelegate(Object delegate) {
+    if (delegateType.isInstance(delegate)) {
+      return (D) delegate;
+    }
+    if (delegate instanceof Map<?, ?> map) {
+      if (delegateType == LinkedHashMap.class) {
+        return (D) new LinkedHashMap<>(map);
+      }
+      if (delegateType == TreeMap.class) {
+        return (D) new TreeMap<>((Map<?, ?>) map);
+      }
+    } else if (delegate instanceof List<?> list && delegateType == ArrayList.class) {
+      return (D) new ArrayList<>(list);
+    } else if (delegate instanceof Set<?> set && delegateType == LinkedHashSet.class) {
+      return (D) new LinkedHashSet<>(set);
+    }
+    return (D) delegate;
   }
 }

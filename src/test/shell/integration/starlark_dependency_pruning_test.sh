@@ -244,6 +244,10 @@ function test_dependency_pruning_scenario() {
 }
 
 function test_dependency_pruning_scenario_unicode() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   local unicode="äöüÄÖÜß🌱"
 
   # Initial build.

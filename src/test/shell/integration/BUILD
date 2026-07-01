@@ -21,9 +21,16 @@ sh_library(
 sh_library(
     name = "test-deps-minimal-bazel",
     testonly = 1,
-    srcs = [
-        "//src:bazel-bin_jdk_minimal",
-        "//src/test/shell:bin/bazel_jdk_minimal",
+    srcs = select({
+        "//src/test/shell/bazel:do_use_native_bazel": [
+            "//src:bazel_native",
+            "//src/test/shell:bin/bazel_native",
+        ],
+        "//conditions:default": [
+            "//src:bazel-bin_jdk_minimal",
+            "//src/test/shell:bin/bazel_jdk_minimal",
+        ],
+    }) + [
         "//src/test/shell/bazel:test-deps-wo-bazel",
     ],
 )
@@ -31,9 +38,16 @@ sh_library(
 sh_library(
     name = "test-deps-nojdk",
     testonly = 1,
-    srcs = [
-        "//src:bazel-bin_nojdk",
-        "//src/test/shell:bin/bazel_nojdk",
+    srcs = select({
+        "//src/test/shell/bazel:do_use_native_bazel": [
+            "//src:bazel_native",
+            "//src/test/shell:bin/bazel_native",
+        ],
+        "//conditions:default": [
+            "//src:bazel-bin_nojdk",
+            "//src/test/shell:bin/bazel_nojdk",
+        ],
+    }) + [
         "//src/test/shell/bazel:test-deps-wo-bazel",
     ],
 )

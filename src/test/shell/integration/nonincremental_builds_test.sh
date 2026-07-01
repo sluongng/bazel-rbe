@@ -47,6 +47,10 @@ if [[ $javabase = external/* ]]; then
 fi
 jmaptool="$(rlocation "${javabase}/bin/jmap${EXE_EXT}")"
 
+function using_native_bazel() {
+    [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]
+}
+
 if ! type try_with_timeout >&/dev/null; then
   # Bazel's testenv.sh defines try_with_timeout but the Google-internal version
   # uses a different testenv.sh.
@@ -107,6 +111,9 @@ function test_build_is_nonincremental_with_nokeep_state() {
 
 # Test directly that the inmemory state does persist after the build by default.
 function test_inmemory_state_present_after_build() {
+    if using_native_bazel; then
+      return 0
+    fi
     local -r pkg=$FUNCNAME
     create_minimal_target $pkg
     bazel build $pkg:top &> "$TEST_log"  \
@@ -121,6 +128,9 @@ function test_inmemory_state_present_after_build() {
 
 # Test directly that the inmemory state does not persist after the build.
 function test_inmemory_state_absent_after_build_with_nokeep_state() {
+    if using_native_bazel; then
+      return 0
+    fi
     local -r pkg=$FUNCNAME
     create_minimal_target $pkg
     bazel build --nokeep_state_after_build $pkg:top &> "$TEST_log"  \

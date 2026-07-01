@@ -35,6 +35,9 @@ public class ShallowObjectSizeComputer {
 
   private static final Layout NO_COMPRESSED_OOPS = new Layout(16, 8, 8, 8, 24);
 
+  private static final boolean IN_NATIVE_IMAGE =
+      System.getProperty("org.graalvm.nativeimage.imagecode") != null;
+
   private static final Layout LAYOUT = Layout.getCurrentLayout();
 
   private ShallowObjectSizeComputer() {}
@@ -60,6 +63,10 @@ public class ShallowObjectSizeComputer {
     }
 
     public static Layout getCurrentLayout() {
+      if (IN_NATIVE_IMAGE) {
+        return COMPRESSED_OOPS;
+      }
+
       if (!System.getProperty("java.vm.name").startsWith("OpenJDK ")) {
         throw new IllegalStateException("Only OpenJDK is supported");
       }

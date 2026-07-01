@@ -23,13 +23,29 @@ import com.google.devtools.build.lib.jni.JniLoader;
 import com.google.devtools.build.lib.runtime.BlazeModule;
 import com.google.devtools.build.lib.runtime.BlazeRuntime;
 import com.google.devtools.build.lib.shell.WindowsSubprocessFactory;
+import com.google.devtools.build.lib.util.SimpleLogHandler;
+import com.google.devtools.build.lib.util.SingleLineFormatter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /** The main class. */
 public final class Bazel {
   private static final String BUILD_DATA_PROPERTIES = "/build-data.properties";
+  private static final String BAZEL_NATIVE_FILE_ENCODING = "ISO-8859-1";
+  private static final String BAZEL_NATIVE_PLATFORM_ENCODING = "ISO-8859-1";
+  private static final String INSTALL_BASE_PROPERTY = "bazel.native.install_base";
+  private static final String LOG_HANDLER_QUERIER_PROPERTY =
+      "com.google.devtools.build.lib.util.LogHandlerQuerier.class";
+  private static final int LOG_ROTATE_LIMIT_BYTES = 1024000;
+  private static final int LOG_TOTAL_LIMIT_BYTES = 20 * 1024 * 1024;
 
   /**
    * The list of modules to load. Note that the order is important: In case multiple modules provide
@@ -109,8 +125,79 @@ public final class Bazel {
     // Windows. We do this in Bazel.java to make sure that the global state is set before the first
     // use of SubprocessBuilder.
     WindowsSubprocessFactory.maybeInstallWindowsSubprocessFactory();
+    configureNativeImageLogging(args);
     BlazeVersionInfo.setBuildInfo(tryGetBuildInfo());
     BlazeRuntime.main(BAZEL_MODULES, BAZEL_SERVICES, args, JniLoader.getJniLoadError());
+  }
+
+  private static void configureNativeImageLogging(String[] args) {
+    if (!isNativeImage()) {
+      return;
+    }
+    System.setProperty("file.encoding", BAZEL_NATIVE_FILE_ENCODING);
+    System.setProperty("native.encoding", BAZEL_NATIVE_PLATFORM_ENCODING);
+    System.setProperty("sun.jnu.encoding", BAZEL_NATIVE_PLATFORM_ENCODING);
+    Optional<Path> outputBase = getOutputBase(args);
+    if (outputBase.isEmpty()) {
+      return;
+    }
+    getInstallBase(args)
+        .ifPresent(path -> System.setProperty(INSTALL_BASE_PROPERTY, path.toString()));
+    try {
+      Files.createDirectories(outputBase.get());
+      System.setProperty(
+          LOG_HANDLER_QUERIER_PROPERTY, SimpleLogHandler.HandlerQuerier.class.getName());
+      Logger rootLogger = Logger.getLogger("");
+      for (Handler handler : rootLogger.getHandlers()) {
+        rootLogger.removeHandler(handler);
+        handler.close();
+      }
+      rootLogger.setUseParentHandlers(false);
+      rootLogger.addHandler(
+          SimpleLogHandler.builder()
+              .setPrefix(outputBase.get().resolve("java.log").toString())
+              .setRotateLimitBytes(LOG_ROTATE_LIMIT_BYTES)
+              .setTotalLimitBytes(LOG_TOTAL_LIMIT_BYTES)
+              .setFormatter(new SingleLineFormatter())
+              .setLogLevel(Level.INFO)
+              .build());
+      rootLogger.setLevel(Level.INFO);
+      Logger.getLogger(Bazel.class.getName()).info("Bazel native-image server logging initialized");
+    } catch (IOException | RuntimeException e) {
+      System.err.println("Failed to configure native-image server logging: " + e.getMessage());
+    }
+  }
+
+  private static Optional<Path> getOutputBase(String[] args) {
+    return getStartupPath(args, "--output_base");
+  }
+
+  private static Optional<Path> getInstallBase(String[] args) {
+    return getStartupPath(args, "--install_base");
+  }
+
+  private static Optional<Path> getStartupPath(String[] args, String optionName) {
+    for (int i = 0; i < args.length; i++) {
+      if (args[i].startsWith(optionName + "=")) {
+        return getPath(args[i].substring(optionName.length() + 1));
+      }
+      if (args[i].equals(optionName) && i + 1 < args.length) {
+        return getPath(args[i + 1]);
+      }
+    }
+    return Optional.empty();
+  }
+
+  private static Optional<Path> getPath(String path) {
+    try {
+      return Optional.of(Path.of(path));
+    } catch (InvalidPathException e) {
+      return Optional.empty();
+    }
+  }
+
+  private static boolean isNativeImage() {
+    return System.getProperty("org.graalvm.nativeimage.imagecode") != null;
   }
 
   /**

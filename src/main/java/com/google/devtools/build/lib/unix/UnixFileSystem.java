@@ -31,8 +31,10 @@ import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.lib.vfs.SymlinkTargetType;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Collection;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -41,6 +43,9 @@ import javax.annotation.Nullable;
  */
 @ThreadSafe
 public class UnixFileSystem extends DiskBackedFileSystem {
+  private static final boolean IN_NATIVE_IMAGE =
+      System.getProperty("org.graalvm.nativeimage.imagecode") != null;
+
   protected final String hashAttributeName;
   protected final NativePosixFilesService nativePosixFilesService;
 
@@ -164,6 +169,14 @@ public class UnixFileSystem extends DiskBackedFileSystem {
     return statNullable(path, followSymlinks) != null;
   }
 
+  @Override
+  public InputStream getInputStream(PathFragment path) throws IOException {
+    if (!IN_NATIVE_IMAGE) {
+      return super.getInputStream(path);
+    }
+    return new NativeReadInputStream(nativePosixFilesService, path.getPathString());
+  }
+
   /**
    * Return true iff the {@code stat} of {@code path} resulted in an {@code ENOENT} or {@code
    * ENOTDIR} error.
@@ -258,6 +271,51 @@ public class UnixFileSystem extends DiskBackedFileSystem {
   @Override
   public boolean mayBeCaseOrNormalizationInsensitive() {
     return OS.getCurrent() == OS.DARWIN;
+  }
+
+  private static final class NativeReadInputStream extends InputStream {
+    private final NativePosixFilesService nativePosixFilesService;
+    private int fd;
+
+    private NativeReadInputStream(NativePosixFilesService nativePosixFilesService, String path)
+        throws IOException {
+      this.nativePosixFilesService = nativePosixFilesService;
+      this.fd = nativePosixFilesService.openReadOnly(path);
+    }
+
+    @Override
+    public int read() throws IOException {
+      byte[] buffer = new byte[1];
+      int bytesRead = read(buffer, 0, 1);
+      return bytesRead == -1 ? -1 : Byte.toUnsignedInt(buffer[0]);
+    }
+
+    @Override
+    public int read(byte[] bytes, int offset, int length) throws IOException {
+      Objects.checkFromIndexSize(offset, length, bytes.length);
+      if (length == 0) {
+        return 0;
+      }
+      ensureOpen();
+      int bytesRead = nativePosixFilesService.read(fd, bytes, offset, length);
+      return bytesRead == 0 ? -1 : bytesRead;
+    }
+
+    @Override
+    public void close() throws IOException {
+      if (fd == -1) {
+        return;
+      }
+      int fdToClose = fd;
+      fd = -1;
+      nativePosixFilesService.close(fdToClose);
+    }
+
+    private void ensureOpen() throws IOException {
+      if (fd == -1) {
+        throw new IOException("Stream closed");
+      }
+    }
   }
 
   @Override

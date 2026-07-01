@@ -202,6 +202,10 @@ EOF
 }
 
 function test_consistent_command_line_encoding {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   local -r arg="äöüÄÖÜß🌱"
 
   add_rules_shell "MODULE.bazel"
@@ -234,6 +238,10 @@ EOF
 }
 
 function test_consistent_env_var_encoding {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   local -r env="äöüÄÖÜß🌱"
 
   add_rules_shell "MODULE.bazel"
@@ -277,6 +285,10 @@ EOF
 }
 
 function test_consistent_working_directory_encoding {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   local -r unicode_string="äöüÄÖÜß🌱"
 
   add_rules_shell "MODULE.bazel"

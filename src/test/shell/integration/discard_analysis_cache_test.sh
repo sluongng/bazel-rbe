@@ -47,6 +47,10 @@ if [[ $javabase = external/* ]]; then
 fi
 jmaptool="$(rlocation "${javabase}/bin/jmap${EXE_EXT}")"
 
+function using_native_bazel() {
+  [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]
+}
+
 function write_hello_world_files() {
   mkdir -p hello || fail "mkdir hello failed"
   cat >hello/BUILD <<EOF
@@ -130,6 +134,9 @@ function extract_histogram_count() {
 }
 
 function test_aspect_and_configured_target_cleared() {
+  if using_native_bazel; then
+    return 0
+  fi
   # NestedSetCodec can hang on to objects.
   export DONT_SANITY_CHECK_SERIALIZATION=1
   mkdir -p "foo" || fail "Couldn't make directory"

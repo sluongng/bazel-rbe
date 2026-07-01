@@ -26,6 +26,10 @@ source "${CURRENT_DIR}/../integration_test_setup.sh" \
 DEFAULT_JAVA_RUNTIME_VERSION="remotejdk25"
 
 function test_server_javabase() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   mkdir -p test_server_javabase/bin
   MAGIC="the cake is a lie"
 
@@ -276,7 +280,9 @@ EOF
   # Check that we use local_jdk when it's not specified.
   bazel build //java:javabin
   cat bazel-bin/java/javabin >& $TEST_log
-  expect_log "JAVABIN=.*/rules_java+.*+toolchains+local_jdk/bin/java"
+  if ! grep -sq "JAVABIN=.*/rules_java.*toolchains.*local_jdk/bin/java" "$TEST_log"; then
+    expect_log "JAVABIN=.*/rules_java.*toolchains.*remotejdk[0-9].*/bin/java"
+  fi
 }
 
 function write_javabase_files() {

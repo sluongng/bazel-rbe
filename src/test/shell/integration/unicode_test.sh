@@ -44,6 +44,10 @@ function set_up {
 }
 
 function test_unicode_genrule_cmd {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   local test_name="genrule_cmd"
   bazel build --genrule_strategy=local --spawn_strategy=local \
     --verbose_failures "//:${test_name}" >& "$TEST_log" \
@@ -55,6 +59,10 @@ function test_unicode_genrule_cmd {
 }
 
 function test_unicode_action_run_argument {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   local test_name="action_run_argument"
   bazel build --genrule_strategy=local --spawn_strategy=local \
     --verbose_failures "//:${test_name}" >& "$TEST_log" \

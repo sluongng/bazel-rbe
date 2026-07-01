@@ -90,6 +90,11 @@ public class BazelFileSystemModule extends BlazeModule {
         switch (OS.getCurrent()) {
           case WINDOWS ->
               new WindowsFileSystem(digestHashFunction, options.getEnableWindowsSymlinks());
+          case DARWIN, FREEBSD, LINUX, OPENBSD, UNKNOWN ->
+              new UnixFileSystem(
+                  digestHashFunction,
+                  options.getUnixDigestHashAttributeName(),
+                  nativePosixFilesService);
           default ->
               new UnixFileSystem(
                   digestHashFunction,
@@ -99,4 +104,5 @@ public class BazelFileSystemModule extends BlazeModule {
 
     return ModuleFileSystem.create(fs);
   }
+
 }

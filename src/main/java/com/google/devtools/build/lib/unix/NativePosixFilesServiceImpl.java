@@ -80,6 +80,15 @@ public final class NativePosixFilesServiceImpl implements NativePosixFilesServic
   public native byte[] lgetxattr(String path, String name) throws IOException;
 
   @Override
+  public native int openReadOnly(String path) throws IOException;
+
+  @Override
+  public native int read(int fd, byte[] bytes, int offset, int length) throws IOException;
+
+  @Override
+  public native void close(int fd) throws IOException;
+
+  @Override
   public native void deleteTreesBelow(String dir) throws IOException;
 
   /** Logs a path string that does not have a Latin-1 coder. Called from JNI. */

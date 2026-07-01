@@ -353,10 +353,18 @@ EOF
 }
 
 function test_interrupt_streamed_output_local() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   do_test_interrupt_streamed_output local
 }
 
 function test_interrupt_streamed_output_sandboxed() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   do_test_interrupt_streamed_output sandboxed
 }
 
@@ -394,6 +402,10 @@ EOF
 }
 
 function test_sigint_not_graceful_by_default_local() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   if is_windows; then
     return 0
   fi
@@ -405,6 +417,10 @@ function test_sigint_not_graceful_by_default_local() {
 }
 
 function test_sigint_not_graceful_by_default_sandboxed() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
 if is_windows; then
     return 0
   fi
@@ -435,10 +451,18 @@ function do_test_sigint_with_graceful_termination() {
 }
 
 function test_sigint_with_graceful_termination_local() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   do_test_sigint_with_graceful_termination local
 }
 
 function test_sigint_with_graceful_termination_sandboxed() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   do_test_sigint_with_graceful_termination sandboxed
 }
 

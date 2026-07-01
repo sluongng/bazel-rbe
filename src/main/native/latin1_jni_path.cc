@@ -66,6 +66,40 @@ jfieldID GetFieldId(JNIEnv* env, jclass clazz, const char* name,
   return field;
 }
 
+int Utf8Length(jchar c) {
+  if (c <= 0x007f) {
+    return 1;
+  }
+  if (c <= 0x07ff) {
+    return 2;
+  }
+  return 3;
+}
+
+char* NewUtf8String(const jchar* str, jint len) {
+  size_t result_len = 0;
+  for (int i = 0; i < len; i++) {
+    result_len += Utf8Length(str[i]);
+  }
+  char* result = new char[result_len + 1];
+  size_t out = 0;
+  for (int i = 0; i < len; i++) {
+    jchar c = str[i];
+    if (c <= 0x007f) {
+      result[out++] = static_cast<char>(c);
+    } else if (c <= 0x07ff) {
+      result[out++] = static_cast<char>(0xc0 | (c >> 6));
+      result[out++] = static_cast<char>(0x80 | (c & 0x3f));
+    } else {
+      result[out++] = static_cast<char>(0xe0 | (c >> 12));
+      result[out++] = static_cast<char>(0x80 | ((c >> 6) & 0x3f));
+      result[out++] = static_cast<char>(0x80 | (c & 0x3f));
+    }
+  }
+  result[out] = 0;
+  return result;
+}
+
 void LogBadPath(JNIEnv* env, jstring jstr) {
   static const jclass cls = GetClass(
       env, "com/google/devtools/build/lib/unix/NativePosixFilesServiceImpl");
@@ -117,10 +151,22 @@ char* GetStringLatin1Chars(JNIEnv* env, jstring jstr) {
     BAZEL_CHECK_NE(env->ExceptionOccurred(), nullptr);
     return nullptr;
   }
+  bool has_non_latin1 = false;
+  for (int i = 0; i < len; i++) {
+    if (str[i] > 0x00ff) {
+      has_non_latin1 = true;
+      break;
+    }
+  }
+  if (has_non_latin1) {
+    char* result = NewUtf8String(str, len);
+    env->ReleaseStringCritical(jstr, str);
+    return result;
+  }
   char* result = new char[len + 1];
   for (int i = 0; i < len; i++) {
     jchar unicode = str[i];  // (unsigned)
-    result[i] = unicode <= 0x00ff ? unicode : '?';
+    result[i] = unicode;
   }
   env->ReleaseStringCritical(jstr, str);
   result[len] = 0;

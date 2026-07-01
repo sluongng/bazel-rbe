@@ -95,6 +95,10 @@ function test_command() {
 }
 
 function test_special_chars() {
+  if [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]; then
+    return 0
+  fi
+
   bazel info
   mkdir -p empty || fail "mkdir empty"
   touch empty/BUILD

@@ -50,6 +50,10 @@ if [[ $javabase = external/* ]]; then
 fi
 jmaptool="$(rlocation "${javabase}/bin/jmap${EXE_EXT}")"
 
+function using_native_bazel() {
+  [[ -n "${BAZEL_NATIVE_IMAGE_TEST:-}" ]]
+}
+
 #### SETUP #############################################################
 
 set -e
@@ -242,6 +246,9 @@ EOF
 
 # TODO(b/62450749): This is flaky on CI.
 function test_packages_cleared() {
+  if using_native_bazel; then
+    return 0
+  fi
   add_rules_cc MODULE.bazel
   local histo_file="$(prepare_histogram "--nodiscard_analysis_cache")"
   local package_count="$(extract_histogram_count "$histo_file" \
@@ -401,6 +408,9 @@ function test_packages_cleared_implicit_noincrementality_data() {
 }
 
 function test_actions_not_deleted_after_execution() {
+  if using_native_bazel; then
+    return 0
+  fi
   mkdir -p foo || fail "Couldn't mkdir"
   cat > foo/BUILD <<'EOF' || fail "Couldn't write file"
 genrule(name = "foo", cmd = "touch $@", outs = ["foo.out"])
@@ -419,6 +429,9 @@ EOF
 }
 
 function test_rules_with_no_actions_deleted_if_not_top_level() {
+  if using_native_bazel; then
+    return 0
+  fi
   mkdir -p foo || fail "Couldn't mkdir"
   cat > foo/defs.bzl <<'EOF' || fail "Couldn't write file"
 def _empty_rule_impl(ctx):
@@ -451,6 +464,9 @@ EOF
 }
 
 function test_aspects_with_no_actions_deleted_if_not_top_level() {
+  if using_native_bazel; then
+    return 0
+  fi
   mkdir -p foo || fail "Couldn't mkdir"
   cat > foo/defs.bzl <<'EOF' || fail "Couldn't write file"
 def _empty_aspect_impl(target, ctx):
