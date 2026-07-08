@@ -350,6 +350,12 @@ py_binary(
     srcs = ["bazel_server_native_image_configs.py"],
 )
 
+_NATIVE_IMAGE_EXEC_PROPERTIES = {
+    "EstimatedComputeUnits": "16",
+    "EstimatedFreeDiskBytes": "200GB",
+    "container-image": "docker://ghcr.io/sluongng/bazel-rbe@sha256:2242a8adaead05cb286c428167bb4f549f837dbae2a0b6fd1cf10d963118e675",
+}
+
 _NATIVE_IMAGE_PLATFORM_CONSTRAINTS = [
     "@platforms//cpu:x86_64",
     "@platforms//os:linux",
@@ -358,12 +364,13 @@ _NATIVE_IMAGE_PLATFORM_CONSTRAINTS = [
 bazel_server_native_image(
     name = "bazel-server-native-image",
     deploy_jar = "//src/main/java/com/google/devtools/build/lib/bazel:BazelServer_deploy.jar",
-    exec_compatible_with = _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
+    exec_compatible_with = ["//:highcpu_machine"] + _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
+    exec_properties = _NATIVE_IMAGE_EXEC_PROPERTIES,
     graalvm_files = "@graalvm_25_1_3_linux_x64//:files",
     gc = "G1",
     jni_configuration = "bazel_server_native_jni_config.json",
     native_image_tool = "@graalvm_25_1_3_linux_x64//:bin/native-image",
-    parallelism = 6,
+    parallelism = 16,
     reflection_configuration = "bazel_server_native_reflect_config.json",
     target_compatible_with = _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
 )
@@ -371,14 +378,15 @@ bazel_server_native_image(
 bazel_server_native_image(
     name = "bazel-server-native-image-pgo-instrumented",
     deploy_jar = "//src/main/java/com/google/devtools/build/lib/bazel:BazelServer_deploy.jar",
-    exec_compatible_with = _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
+    exec_compatible_with = ["//:highcpu_machine"] + _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
+    exec_properties = _NATIVE_IMAGE_EXEC_PROPERTIES,
     graalvm_files = "@graalvm_25_1_3_linux_x64//:files",
     gc = "G1",
     jni_configuration = "bazel_server_native_jni_config.json",
     jdk_library_path = "bazel-server-native-image-pgo-instrumented/libmanagement_ext.so",
     native_image_tool = "@graalvm_25_1_3_linux_x64//:bin/native-image",
     output_path = "bazel-server-native-image-pgo-instrumented/A-server-native",
-    parallelism = 6,
+    parallelism = 16,
     pgo_instrument = True,
     reflection_configuration = "bazel_server_native_reflect_config.json",
     target_compatible_with = _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
@@ -387,14 +395,15 @@ bazel_server_native_image(
 bazel_server_native_image(
     name = "bazel-server-native-image-pgo",
     deploy_jar = "//src/main/java/com/google/devtools/build/lib/bazel:BazelServer_deploy.jar",
-    exec_compatible_with = _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
+    exec_compatible_with = ["//:highcpu_machine"] + _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
+    exec_properties = _NATIVE_IMAGE_EXEC_PROPERTIES,
     graalvm_files = "@graalvm_25_1_3_linux_x64//:files",
     gc = "G1",
     jni_configuration = "bazel_server_native_jni_config.json",
     jdk_library_path = "bazel-server-native-image-pgo/libmanagement_ext.so",
     native_image_tool = "@graalvm_25_1_3_linux_x64//:bin/native-image",
     output_path = "bazel-server-native-image-pgo/A-server-native",
-    parallelism = 6,
+    parallelism = 16,
     pgo_profiles = ["bazel_server_native_pgo_profile.iprof"],
     reflection_configuration = "bazel_server_native_reflect_config.json",
     target_compatible_with = _NATIVE_IMAGE_PLATFORM_CONSTRAINTS,
