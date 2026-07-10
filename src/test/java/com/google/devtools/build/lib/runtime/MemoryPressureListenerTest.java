@@ -89,6 +89,16 @@ public final class MemoryPressureListenerTest {
   }
 
   @Test
+  public void createFromBeans_noGcBeansCreatesNoopListener() {
+    MemoryPressureListener underTest =
+        MemoryPressureListener.createFromBeans(ImmutableList.of(), directExecutor());
+
+    underTest.initForInvocation(
+        eventBus, mock(GcThrashingDetector.class), mock(GcChurningDetector.class));
+    underTest.reset();
+  }
+
+  @Test
   public void simple() {
     MemoryPressureListener underTest =
         MemoryPressureListener.createFromBeans(

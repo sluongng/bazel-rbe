@@ -66,6 +66,9 @@ final class MemoryPressureListener implements NotificationListener {
       List<GarbageCollectorMXBean> gcBeans, Executor executor) {
     ImmutableList<NotificationEmitter> tenuredGcEmitters = findTenuredCollectorBeans(gcBeans);
     if (tenuredGcEmitters.isEmpty()) {
+      if (gcBeans.isEmpty()) {
+        return new MemoryPressureListener(executor);
+      }
       var names =
           gcBeans.stream()
               .map(GarbageCollectorMXBean::getMemoryPoolNames)
