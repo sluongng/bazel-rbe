@@ -405,7 +405,7 @@
   "moduleExtensions": {
     "//:repositories.bzl%async_profiler_repos": {
       "general": {
-        "bzlTransitiveDigest": "LMpcBeOWpEPwMPAeLGGlcnXkBqnFbwicLA7nmp7xnMI=",
+        "bzlTransitiveDigest": "eJxDSTHZhz5HhSGjAYMAcRWaX/zJt0JwxSLuL1zxo5o=",
         "usagesDigest": "7jreou9WV8qOgoUM+8bYvk7WC5dIlxvYXDi24CckXQQ=",
         "recordedInputs": [
           "REPO_MAPPING:,async_profiler +async_profiler_repos+async_profiler",
@@ -464,7 +464,7 @@
     },
     "//:repositories.bzl%dist_repos": {
       "general": {
-        "bzlTransitiveDigest": "LMpcBeOWpEPwMPAeLGGlcnXkBqnFbwicLA7nmp7xnMI=",
+        "bzlTransitiveDigest": "eJxDSTHZhz5HhSGjAYMAcRWaX/zJt0JwxSLuL1zxo5o=",
         "usagesDigest": "u4MQlLLOWmhIn5xZCQ9o49SJ7Q1rr8FsLCHyAWLTcw4=",
         "recordedInputs": [
           "REPO_MAPPING:,async_profiler +async_profiler_repos+async_profiler",
@@ -490,7 +490,7 @@
     },
     "@@bazel_ci_rules+//:rbe_config.bzl%rbe_config_extension": {
       "general": {
-        "bzlTransitiveDigest": "YxbbJz9gYdazaj5RePCEcYS8g/C5QDL+HwwZOmeE6wM=",
+        "bzlTransitiveDigest": "iCqsMBMOe11Ye7QooQdHo6UYM4yP7BAmkRSJFy+JbNI=",
         "usagesDigest": "HujAq5EGA+Tlz7DHoDf3wQuuXcobfsrLb9WdkQry/+A=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
@@ -505,7 +505,7 @@
     },
     "@@envoy_api+//bazel:repositories.bzl%non_module_deps": {
       "general": {
-        "bzlTransitiveDigest": "sO1nSUs3BI8L38hOTQtEoEuhxLaPPUDBH0cHBXy57ME=",
+        "bzlTransitiveDigest": "y5JiLiSrj5229oCFrTH9OIsJZjC2oc7onktDFwEEcEA=",
         "usagesDigest": "lOhJkV09ITWn6LOK9fLMuf1t3969wdr45lToQ2MVQoU=",
         "recordedInputs": [
           "REPO_MAPPING:envoy_api+,bazel_tools bazel_tools",
@@ -528,7 +528,7 @@
     },
     "@@googleapis+//:extensions.bzl%switched_rules": {
       "general": {
-        "bzlTransitiveDigest": "RPY/jLLj3dRtfWAj2WDNxEzoKdWQBXnaOeGbYQsSdn8=",
+        "bzlTransitiveDigest": "GOpabIu1DjmMa/A+cvdCMo9X5niPxtzdz3Ts6aWG9jY=",
         "usagesDigest": "fX5NfTMtoiGSmzKjEFxEfjRhoADEHGCUJl/VRdpoXI4=",
         "recordedInputs": [],
         "generatedRepoSpecs": {}
@@ -536,7 +536,7 @@
     },
     "@@protobuf+//python/dist:system_python.bzl%system_python_extension": {
       "general": {
-        "bzlTransitiveDigest": "qh0n9IrXU/xS94wxKQrG1J63zrLkA1Wy2Y3BQxptPcI=",
+        "bzlTransitiveDigest": "XIzUjPrPvfZw+ee/BZaUhkKywlpB0qAKyTi/+DyC/XI=",
         "usagesDigest": "kVbxR/mYndN3QWrZLS6jdk6e1CL7kQy3QMa3NBMjEpE=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
@@ -551,7 +551,7 @@
     },
     "@@rules_android+//bzlmod_extensions:apksig.bzl%apksig_extension": {
       "general": {
-        "bzlTransitiveDigest": "qEcqhUuyYlPmvAtyYRqS+4Y7cRHA2Vho3JIBJZJJX+s=",
+        "bzlTransitiveDigest": "+TanzzAqyZyzh5evB49Cae3YJAY2f9CwDj2c9OaJRQg=",
         "usagesDigest": "zr/niBQ/s2fHozWAsg4vI70wAxcuFjG+QtM15qGkq9o=",
         "recordedInputs": [
           "REPO_MAPPING:rules_android+,bazel_tools bazel_tools"
@@ -569,7 +569,7 @@
     },
     "@@rules_android+//bzlmod_extensions:com_android_dex.bzl%com_android_dex_extension": {
       "general": {
-        "bzlTransitiveDigest": "gTuOqknGgqPw9YQSCY+qXxgxVwiLRGdBCsCe4i4q/xw=",
+        "bzlTransitiveDigest": "qqANXh/3TIrnsD/gv0r9Rm0gc9QDc6JX2NT4FkaEwGU=",
         "usagesDigest": "c1Y/KGGjUYCyd8zNIVTUh1bynVXRFz6xGKaSCBpQANM=",
         "recordedInputs": [
           "REPO_MAPPING:rules_android+,bazel_tools bazel_tools"
@@ -587,7 +587,7 @@
     },
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
-        "bzlTransitiveDigest": "+rMrzIrv7sImYmkbXJYv+gFpTJQ79X3MpwwMLI2A+oA=",
+        "bzlTransitiveDigest": "aLDGLKolYFwLsBssOQfwOs+bo3Aof0yKkW0HQRPX3ms=",
         "usagesDigest": "iEGI2aNDMkHt9LXCdViLNUUOslpiVj2DrevWWXZEFnU=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
@@ -600,7 +600,7 @@
     },
     "@@rules_perl+//perl:extensions.bzl%perl_repositories": {
       "general": {
-        "bzlTransitiveDigest": "Gd6ZAhd8uK8ISFtBAmMWVA5xlNiJ/0RI1lzxzVqy77A=",
+        "bzlTransitiveDigest": "Eak3jgPst6xeAajNVGu9LF7SosN6YGCKeyAq5SQFy7o=",
         "usagesDigest": "qSSNDdCNVxNhY36wMndEAFacdhR0ooLTmumfad0km9s=",
         "recordedInputs": [
           "REPO_MAPPING:rules_perl+,bazel_tools bazel_tools",
@@ -663,7 +663,7 @@
     },
     "@@rules_python+//python/extensions:config.bzl%config": {
       "general": {
-        "bzlTransitiveDigest": "dzD8Q2YmrP3fz8saWLHPmlwPLO91ImtTmP/c9JKTStM=",
+        "bzlTransitiveDigest": "vSIN9+22yYPMY3DLP2SejwkXW+up7aZ7qC3MIyiNYeA=",
         "usagesDigest": "ZVSXMAGpD+xzVNPuvF1IoLBkty7TROO0+akMapt1pAg=",
         "recordedInputs": [
           "REPO_MAPPING:rules_python+,bazel_tools bazel_tools",
@@ -831,7 +831,7 @@
     },
     "@@rules_python+//python/uv:uv.bzl%uv": {
       "general": {
-        "bzlTransitiveDigest": "ijW9KS7qsIY+yBVvJ+Nr1mzwQox09j13DnE3iIwaeTM=",
+        "bzlTransitiveDigest": "SxM597Xgir5amMOGJtvYenMreZ/ZLSncCbC65J1FDBs=",
         "usagesDigest": "H8dQoNZcoqP+Mu0tHZTi4KHATzvNkM5ePuEqoQdklIU=",
         "recordedInputs": [
           "REPO_MAPPING:rules_python+,bazel_tools bazel_tools",
@@ -854,6 +854,30 @@
                 ]
               },
               "toolchain_target_settings": {}
+            }
+          }
+        }
+      }
+    },
+    "@@toolchains_buildbuddy+//:extensions.bzl%buildbuddy": {
+      "general": {
+        "bzlTransitiveDigest": "v6zYQG08sM9/Zr5+kuudfewRsSqnVYQdD2u6i85ks+g=",
+        "usagesDigest": "L4JCvbtLov0UbF1KDKUoWiCXHcHSMIAlruUaM5Y/Z2g=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "buildbuddy_toolchain": {
+            "repoRuleId": "@@toolchains_buildbuddy+//:rules.bzl%_buildbuddy_toolchain",
+            "attributes": {
+              "container_image": "gcr.io/flame-public/rbe-ubuntu24-04:latest",
+              "llvm": false,
+              "java_version": "",
+              "gcc_version": "",
+              "msvc_edition": "Community",
+              "msvc_release": "2022",
+              "msvc_version": "14.39.33519",
+              "windows_kits_release": "10",
+              "windows_kits_version": "10.0.22621.0",
+              "extra_cxx_builtin_include_directories": []
             }
           }
         }
